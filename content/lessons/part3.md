@@ -1148,6 +1148,61 @@ class PlaceOrderSaga {
 }
 ```
 
+### Orchestration Calls Out to Services
+
+The orchestrator is just the coordinator. It calls other services via HTTP, gRPC, or messaging. It doesn't contain the business logic itself:
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+class PlaceOrderSaga {
+  constructor(
+    private paymentService: PaymentClient,     // HTTP call to payment service
+    private inventoryService: InventoryClient,  // HTTP call to inventory service
+    private shippingService: ShippingClient,    // HTTP call to shipping service
+  ) {}
+
+  async execute(order: Order) {
+    await this.paymentService.charge(order);    // remote call
+    await this.inventoryService.reserve(order); // remote call
+    await this.shippingService.schedule(order); // remote call
+  }
+}
+```
+
+### Every Saga Step Must Be Idempotent
+
+Both forward steps and compensating actions can fail and need retrying. If a refund call times out, did it happen or not? You have to retry. If the refund isn't idempotent, the customer gets refunded twice.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// Inside the payment service - idempotent refund
+async refund(orderId: string) {
+  // Check if already refunded
+  const existing = await db.query(
+    "SELECT 1 FROM refunds WHERE order_id = $1", [orderId]
+  );
+  if (existing.rows.length > 0) return; // already done, skip
+
+  await stripe.refunds.create({ payment_intent: paymentId });
+  await db.query("INSERT INTO refunds (order_id) VALUES ($1)", [orderId]);
+}
+```
+
+This applies to every step in the saga:
+
+| Step | Why it must be idempotent |
+|---|---|
+| `charge(orderId)` | Orchestrator might retry if it didn't get a response |
+| `reserve(orderId)` | Network could fail after the service processed it |
+| `refund(orderId)` | Compensation might be retried if the first attempt timed out |
+| `release(orderId)` | Same |
+
+<div class="callout tip">
+  <strong>The pattern:</strong> every service checks "have I already done this?" before doing anything. Use a unique identifier (like orderId) to track what's been processed. This makes every call safe to retry.
+</div>
+
 ### Choreography vs Orchestration
 
 | | Choreography | Orchestration |
