@@ -168,6 +168,34 @@ eventBus.subscribe("OrderPlaced", async (event) => {
   <strong>Adding a new subscriber?</strong> Just subscribe. OrderService doesn't change. That's the power of loose coupling through events.
 </div>
 
+### Events Don't Replace APIs
+
+Events and queues sit alongside APIs and direct calls, not instead of them. A typical system uses both:
+
+```text
+User → API (REST) → Order Service → saves to DB (synchronous)
+                                   → publishes event (asynchronous)
+                                   → returns response to user
+
+The user waits for the API response.
+Downstream services react to the event in the background.
+```
+
+You wouldn't replace `GET /orders/123` with an event. The user needs a response now. But you would replace "Order Service directly calls Email Service and Analytics Service" with events, because the user doesn't need to wait for those.
+
+| Use case | Use |
+|---|---|
+| User needs a response now | API / direct call |
+| User doesn't need to wait for this | Event / queue |
+| One service needs data from another | API call |
+| Multiple services need to react to something | Event |
+| Need to retry failed work | Queue |
+| Need audit trail / replay | Event stream |
+
+<div class="callout tip">
+  <strong>Most production systems are a mix.</strong> The API handles the request, does the critical work synchronously, then fires off events for everything else. Events add a decoupled, resilient layer for scaling and audit history. They don't replace your API.
+</div>
+
 ### Commands vs Events
 
 These are two different types of messages with different semantics:
