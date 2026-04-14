@@ -56,6 +56,10 @@ quiz:
 
 **REST** (Representational State Transfer) is an architectural style for APIs. It's not a protocol — it's a set of constraints that, when followed, make APIs predictable and scalable.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Stripe's REST API is widely considered the gold standard for API design. They use consistent resource-based URLs (/v1/charges, /v1/customers), proper HTTP verbs, predictable status codes, and idempotency keys for safe retries. Their API is so well-designed that "make it like Stripe's API" has become shorthand in the industry for good REST practices. It demonstrates how following REST constraints rigorously creates an API that developers love.
+</div>
+
 ### Core Principles
 
 - **Resources** — everything is a resource identified by a URL: `/orders/123`, `/users/456`
@@ -87,6 +91,10 @@ quiz:
 | **5xx** | Server error | 500 Internal Error, 503 Service Unavailable |
 
 ## REST in Practice
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Twilio built their entire business on a clean REST API. Their URL structure (/Accounts/{sid}/Messages) uses nouns and hierarchy, POST creates messages, GET retrieves them, and every response includes consistent pagination and error formats. This predictability meant developers could integrate Twilio in hours, not days — proving that practical REST design directly impacts developer adoption and business growth.
+</div>
 
 ### URL Design
 
@@ -209,6 +217,10 @@ APIs evolve. Common strategies:
 
 A query language for APIs. Instead of the server deciding what data to return, the **client specifies exactly what it needs**.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> GitHub switched from REST (v3) to GraphQL (v4) for their public API. Their REST API required multiple round trips to fetch a pull request with its reviews, comments, and status checks — sometimes 5+ requests. With GraphQL, clients fetch all of that in a single query. GitHub reported that mobile clients saw significant performance improvements because they could request only the fields they needed instead of downloading full resource representations.
+</div>
+
 ### How It Works
 
 One endpoint (`POST /graphql`), the client sends a query:
@@ -309,6 +321,10 @@ const resolvers = {
 
 ## REST vs GraphQL
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Airbnb uses both REST and GraphQL in their architecture. Their internal microservices communicate via REST for simple CRUD operations, while their frontend teams use a GraphQL gateway that aggregates data from multiple services. This hybrid approach lets backend teams keep services simple while giving frontend engineers the flexibility to fetch exactly the data each page needs in a single request.
+</div>
+
 | | REST | GraphQL |
 |---|---|---|
 | **Endpoints** | Many (`/orders`, `/users`) | One (`/graphql`) |
@@ -336,6 +352,10 @@ const resolvers = {
 ## Domain Modeling
 
 Domain modeling is about structuring your code around the **business problem**, not the database or UI. It comes from Domain-Driven Design (DDD).
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> A large insurance company modeled their policies as aggregates with the Policy entity as the root, containing Coverage value objects and Claim entities. Business rules like "a policy can't have overlapping coverage periods" and "claims can't exceed the coverage limit" were enforced directly on the Policy aggregate. This meant underwriters and developers spoke the same language, and critical business invariants couldn't be bypassed by any code path.
+</div>
 
 ### Entity
 
@@ -432,6 +452,10 @@ class PricingService {
 ## Bounded Contexts
 
 A bounded context is a boundary within which a domain model is defined and consistent. The same real-world concept can mean different things in different contexts.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Amazon's teams each own their own "Customer" model. In the retail context, Customer has a shopping cart and wish list. In the shipping context, Customer has delivery addresses and delivery preferences. In the payments context, Customer has payment methods and billing history. Rather than forcing one massive Customer class across the company, each team defines exactly the model they need. This is a core reason Amazon's teams can deploy independently at scale.
+</div>
 
 <div class="diagram">
   <div class="layer" style="border-color: #4caf50;">

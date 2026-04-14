@@ -56,6 +56,10 @@ quiz:
 
 In a distributed system, you can't have everything. The **CAP theorem** states that when a network partition occurs, a distributed data store can guarantee at most **two of three** properties:
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Amazon DynamoDB chose AP (availability + partition tolerance) by default — during a network partition, it continues serving requests even if some reads return slightly stale data. Google Spanner took the opposite approach, choosing CP (consistency + partition tolerance) by using synchronized atomic clocks (TrueTime) across data centers to guarantee globally consistent reads, accepting that writes may be rejected during partitions. DynamoDB suits shopping carts where availability matters most; Spanner suits financial ledgers where consistency is non-negotiable.
+</div>
+
 <div class="diagram">
   <div class="layer">Consistency — every read gets the most recent write</div>
   <div class="arrow">+</div>
@@ -127,6 +131,10 @@ response = table.get_item(Key={"orderId": "order-123"}, ConsistentRead=True)
 ## Consistency Models
 
 Not all consistency is the same. Different models offer different guarantees — and different costs.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Facebook (Meta) uses different consistency models for different features. News Feed uses eventual consistency — if a friend's post appears a few seconds late, nobody notices. But for Facebook Pay (money transfers), they use strong consistency to ensure balances are always accurate. For Messenger, they use causal consistency so replies always appear after the message they respond to, even across different data centers. This mix-and-match approach lets them optimize cost and performance per feature.
+</div>
 
 ### Strong Consistency
 
@@ -210,6 +218,10 @@ function canDeliver(msg: Message, delivered: Map<string, Message>): boolean {
 
 In a distributed system, how do multiple nodes agree on a single value — like who the leader is, or what the next log entry should be?
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Kubernetes relies on etcd, which implements the Raft consensus protocol, to store all cluster state — pod assignments, service configurations, secrets. When you run <code>kubectl apply</code>, the write must be agreed upon by a majority of etcd nodes before it's committed. This is why Kubernetes control planes run 3 or 5 etcd nodes: with 3 nodes, the cluster tolerates 1 failure; with 5, it tolerates 2. If a majority of etcd nodes go down, the cluster can still run existing workloads but can't schedule new ones.
+</div>
+
 This is the **consensus problem**, and it's hard because:
 
 - Nodes can crash at any time
@@ -249,6 +261,10 @@ Paxos solves the same problem but is notoriously difficult to understand and imp
 ## Microservices Trade-offs
 
 Microservices are not a free upgrade from monoliths. They trade one set of problems for another.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Shopify ran one of the largest Ruby on Rails monoliths in the world, serving millions of merchants. Rather than jumping to microservices, they adopted a "modular monolith" approach — splitting the codebase into well-defined components with enforced boundaries, while keeping it as a single deployable unit. They only extracted services (like their Storefront Renderer) when a specific component had a clear, proven need for independent scaling. This avoided the operational overhead of microservices while still achieving team autonomy.
+</div>
 
 ### When Monolith vs Microservices
 
@@ -323,6 +339,10 @@ async def fetch_with_retry(url: str, max_retries: int = 3, base_delay: float = 0
 
 In a microservices architecture, services need to find each other. IP addresses change as containers scale up and down.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Netflix built Eureka, an open-source service discovery tool, because their AWS-based microservices architecture (600+ services) needed instances to find each other as they constantly scaled up and down. Each service registers itself with Eureka on startup and queries it to find other services. Combined with their client-side load balancer Ribbon, this let Netflix handle millions of concurrent streams even as individual instances were replaced every few hours due to auto-scaling and chaos engineering experiments.
+</div>
+
 ### Client-Side vs Server-Side Discovery
 
 <div class="diagram">
@@ -386,6 +406,10 @@ async def health_check(response: Response):
 ## Circuit Breaker Pattern
 
 When a downstream service is failing, continuing to call it wastes resources and causes cascading failures. A **circuit breaker** detects failures and short-circuits requests.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Netflix developed Hystrix after a major outage where a single failing microservice caused cascading failures across their entire streaming platform. Hystrix wrapped every inter-service call in a circuit breaker: when a downstream service's error rate exceeded a threshold, the circuit opened and immediately returned a fallback response (e.g., a cached recommendation list instead of a personalized one). This meant a failing recommendations service degraded the experience gracefully instead of taking down the entire app. Hystrix is now in maintenance mode, succeeded by Resilience4j, but the pattern it popularized is standard practice.
+</div>
 
 <div class="diagram">
   <div class="layer">CLOSED — requests flow normally, failures are counted</div>
@@ -462,6 +486,10 @@ const result = await breaker.call(
 ## Observability
 
 You can't debug a distributed system with `console.log`. Observability has **three pillars**:
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> An engineering team at a fintech company noticed intermittent 2-second latency spikes on their checkout API but couldn't reproduce them locally. By implementing distributed tracing with Jaeger and propagating trace IDs across their 8 microservices, they discovered that a downstream fraud-detection service was occasionally making a synchronous call to a third-party API that timed out. The trace waterfall showed the exact span where the delay occurred. They added a circuit breaker with a cached fallback, reducing p99 latency from 3.2 seconds to 400 milliseconds.
+</div>
 
 | Pillar | What It Tells You | Tools |
 |---|---|---|

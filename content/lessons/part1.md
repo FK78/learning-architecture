@@ -70,6 +70,10 @@ The most common starting pattern. You organize code into horizontal layers, each
   <div class="layer">Database — The actual data store</div>
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> A typical e-commerce startup using Express or FastAPI naturally falls into this pattern. Controllers handle HTTP parsing, services enforce rules like "don't allow checkout with an empty cart," and repositories talk to PostgreSQL. When the team later migrated their product catalog to Elasticsearch, only the repository layer changed — the service and controller code remained untouched.
+</div>
+
 ### The Rules
 
 - Each layer **only depends on the layer directly below it**
@@ -108,6 +112,10 @@ Controller (receives HTTP request)
 ## Coupling
 
 Coupling measures how much one component depends on the internals of another.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Netflix's early notification system was tightly coupled — the video encoding service directly called email and push notification code. When they needed to add SMS alerts, they had to modify the encoding service. They decoupled by introducing an event bus: services publish events like "encoding complete," and independent notification handlers subscribe to them. This let teams add new notification channels without touching upstream services.
+</div>
 
 ### Spectrum: Tight → Loose
 
@@ -160,6 +168,10 @@ OrderService doesn't know *how* notifications work. It could be email, SMS, a pu
 A `PaymentService` that directly calls Stripe's API is tightly coupled: if Stripe's API changes or you switch provider, PaymentService must be rewritten.
 
 The fix: create a **generic interface** shaped around what your app needs: <span class="label label-ts">TypeScript</span>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Shopify's payment processing supports hundreds of gateways — Stripe, PayPal, Adyen, and more. They achieve this through a PaymentGateway interface that each provider implements. When a merchant switches from Stripe to Adyen, Shopify's core checkout logic doesn't change at all. Only the gateway implementation is swapped, exactly like the pattern shown below.
+</div>
 
 ```typescript
 interface PaymentGateway {
@@ -280,6 +292,10 @@ interface ChargeRequest {
 
 Loose coupling makes code testable — substitute real dependencies with **test doubles**.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Spotify's backend teams rely heavily on test doubles for their microservices. Each service defines interfaces for its dependencies, allowing engineers to run thousands of unit tests in seconds using in-memory fakes. This fast feedback loop lets them deploy to production multiple times per day with confidence, catching logic errors before they ever hit integration environments.
+</div>
+
 <span class="label label-ts">TypeScript</span> — using Jest:
 
 ```typescript
@@ -319,6 +335,10 @@ def test_create_order_notifies_on_success():
 
 Mocks are reliable for **logic in isolation**. But they test what you *think* the dependency does, not what it *actually* does.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Google famously documented this problem in their testing culture. Teams that relied solely on mocked unit tests kept shipping bugs where services failed at integration points — serialization mismatches, unexpected nulls from real databases, and timeout behaviors mocks never simulated. They adopted a "Test Sizes" policy (small/medium/large) mirroring the testing pyramid, requiring medium tests with real dependencies for all critical paths.
+</div>
+
 <div class="callout">
   <strong>The problem:</strong> Your mock says <code>findById</code> returns a User. But what if the real repo throws for deleted users? Test passes, production breaks.
 </div>
@@ -346,6 +366,10 @@ Mocks are reliable for **logic in isolation**. But they test what you *think* th
 
 Cohesion measures how related the responsibilities within a single component are.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> A fintech team inherited a 4,000-line UserService that handled authentication, profile management, KYC verification, email notifications, and audit logging. Every change risked breaking unrelated features, and the file had constant merge conflicts. They split it into five focused services — AuthService, ProfileService, KycService, NotificationService, and AuditService — each under 500 lines. Bug rates dropped and deployment frequency tripled because teams could change one concern without touching the others.
+</div>
+
 <span class="bad">Low cohesion (bad):</span> A `UserService` that handles authentication, profile updates, email sending, report generation, and file uploads.
 
 <span class="good">High cohesion (good):</span> An `AuthenticationService` that handles login, logout, token refresh, and password reset.
@@ -359,6 +383,10 @@ Cohesion measures how related the responsibilities within a single component are
 ## Separation of Concerns
 
 The overarching principle. Each part of the system should address one concern only.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Express and Django both use middleware to separate cross-cutting concerns from business logic. Authentication, rate limiting, and request logging are handled by middleware layers before a request ever reaches a route handler. This means adding JWT authentication to 50 endpoints requires changing one middleware file, not 50 handler functions — a textbook application of separation of concerns.
+</div>
 
 | Concern | Where It Lives |
 |---|---|
@@ -375,6 +403,10 @@ The overarching principle. Each part of the system should address one concern on
 ## DAO — Data Access Object
 
 Encapsulates all data source access behind a clean interface. Your code never sees SQL or connection strings.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> A SaaS startup initially built their app on MySQL with raw SQL queries scattered throughout their services. When they needed to migrate their orders table to DynamoDB for better scalability, they had to rewrite dozens of files. After the migration, they introduced a DAO layer. When they later moved their user data to DynamoDB as well, only the UserDao implementation changed — the rest of the application was untouched.
+</div>
 
 <span class="bad">Without a DAO:</span> <span class="label label-ts">TypeScript</span>
 
@@ -469,6 +501,10 @@ class OrderService {
 ## Repository Pattern
 
 A Repository acts like an **in-memory collection** of domain objects. The fact that a database is involved is completely hidden.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> A logistics company modeled their Shipment aggregate with items, tracking events, and delivery attempts. Their ShipmentRepository loaded and saved the entire aggregate as one unit. When they migrated from PostgreSQL to MongoDB for the shipments domain, the service layer didn't change at all — they simply wrote a new MongoShipmentRepository implementing the same interface. The repository pattern made the database a swappable implementation detail.
+</div>
 
 <span class="label label-ts">TypeScript</span>
 

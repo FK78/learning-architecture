@@ -90,6 +90,10 @@ Two concepts that are often confused but serve completely different purposes.
   <strong>The hotel analogy:</strong> Authentication is showing your ID at check-in. Authorization is your key card only opening <em>your</em> room, not every room.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> GitHub uses multiple authentication mechanisms for different use cases. Users log in via OAuth through the browser, while developers use Personal Access Tokens (PATs) for CLI and API access. Deploy keys provide read-only repo access for CI/CD systems. This layered approach lets GitHub enforce the right level of identity verification for each context — interactive users get MFA prompts, while automated systems use scoped, revocable tokens.
+</div>
+
 ## Authentication Patterns
 
 ### Session-Based Authentication
@@ -185,6 +189,10 @@ X-API-Key: sk_live_abc123def456
 | JWT | No (token is self-contained) | APIs, microservices, SPAs |
 | API Keys | No | Service-to-service, developer APIs |
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Slack uses token-based authentication (OAuth tokens) for its API platform, allowing third-party apps to act on behalf of users. When a developer installs a Slack app, the OAuth flow issues a bot token scoped to specific permissions (e.g., posting messages, reading channels). Slack chose tokens over sessions because their API serves millions of distributed integrations — stateless JWT-style tokens scale without requiring a centralized session store.
+</div>
+
 ## OAuth 2.0 & OpenID Connect
 
 **OAuth 2.0** is an authorization framework — it lets a third-party app access resources on behalf of a user without sharing their password.
@@ -234,6 +242,10 @@ POST /token
 
 <div class="callout info">
   <strong>PKCE</strong> (Proof Key for Code Exchange) protects the authorization code flow for public clients. The app generates a random <code>code_verifier</code>, sends a hash (<code>code_challenge</code>) in the authorize request, and proves possession by sending the original verifier when exchanging the code. This prevents interception attacks.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> When you click "Sign in with Google" on a SaaS app like Notion, you're using OAuth 2.0 Authorization Code Flow with OIDC. Notion redirects you to Google's authorization server, where you authenticate and consent to sharing your profile. Google redirects back with an authorization code, which Notion exchanges server-side for an access token and an ID token containing your identity. This lets Notion verify who you are without ever handling your Google password.
 </div>
 
 ## Authorization Patterns
@@ -335,6 +347,10 @@ function evaluate(ctx: AccessContext): boolean {
   • <strong>RBAC</strong> — simple apps with clear role hierarchies (admin, editor, viewer)<br>
   • <strong>ABAC</strong> — complex rules based on multiple attributes (department, time, classification)<br>
   • <strong>Policy-based</strong> — when authorization rules change frequently or need to be managed externally (e.g., OPA, Cedar)
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> AWS IAM is one of the most sophisticated policy-based authorization systems in production. Every AWS API call is evaluated against JSON policy documents that specify principals, actions, resources, and conditions. For example, a policy can grant an EC2 instance permission to read only from a specific S3 bucket, only during business hours, only if the request originates from a specific VPC. This fine-grained, policy-driven model lets AWS customers enforce least-privilege access across thousands of services and millions of resources.
 </div>
 
 ## API Security
@@ -445,6 +461,10 @@ All traffic must be encrypted in transit. There is no exception.
 - Use HSTS headers to prevent downgrade attacks
 - Keep certificates valid and auto-renewed (Let's Encrypt, ACM)
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> In 2016, a startup called Mailgun experienced a massive bot attack where automated scripts hammered their email-sending API with thousands of requests per second, exhausting resources and degrading service for legitimate customers. They responded by implementing tiered rate limiting using a token bucket algorithm — free-tier accounts got strict limits, while paid accounts received higher thresholds. They also added API key-based identification so they could throttle abusive clients individually without affecting others.
+</div>
+
 ## Zero Trust Architecture
 
 Traditional security: "Trust everything inside the network perimeter."
@@ -484,6 +504,10 @@ Instead of one flat network, divide into small segments. Each service can only c
   • Service mesh (Istio, Linkerd) for automatic mTLS and policy enforcement<br>
   • Short-lived credentials — no long-lived API keys between services<br>
   • Identity-aware proxies (BeyondCorp model)
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Google pioneered Zero Trust with their BeyondCorp initiative, launched after the 2009 Operation Aurora attacks. They eliminated the traditional corporate VPN entirely — employees access internal applications from any network (coffee shop, home, office) through an identity-aware proxy that evaluates every request based on user identity, device health, and context. Access decisions consider factors like whether the device has up-to-date patches and whether the request location is unusual. This model proved so effective that Google published it as a framework, and it became the blueprint for the industry's shift toward Zero Trust.
 </div>
 
 ## Secrets Management
@@ -555,6 +579,10 @@ db_password = get_secret("prod/db-password")
   • Use a vault (AWS Secrets Manager, HashiCorp Vault, Azure Key Vault)<br>
   • Audit access to secrets — who accessed what and when<br>
   • Use different secrets per environment (dev, staging, prod)
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> In 2022, Uber suffered a breach when an attacker found hardcoded admin credentials in a PowerShell script on an internal network share. This gave the attacker access to Uber's Thycotic privileged access management system, and from there to multiple internal systems. After the incident, Uber accelerated their migration to HashiCorp Vault with automated secret rotation and eliminated all hardcoded credentials. The lesson: secrets in code or shared drives are a ticking time bomb.
 </div>
 
 ## Common Vulnerabilities
@@ -638,6 +666,10 @@ res.cookie("session", token, {
 
 <div class="callout">
   <strong>Defense in depth:</strong> Don't rely on a single security measure. Combine parameterized queries + input validation, CSP headers + output escaping, CSRF tokens + SameSite cookies.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> In 2017, Equifax suffered one of the largest data breaches in history, exposing 147 million records. The root cause was an unpatched Apache Struts vulnerability (a form of injection attack) combined with an expired SSL certificate on their intrusion detection system, which meant the breach went undetected for 76 days. This catastrophic failure illustrates why defense in depth matters — a single vulnerability wouldn't have been as devastating if monitoring, patching, and network segmentation had all been functioning properly.
 </div>
 
 ## Key Takeaways

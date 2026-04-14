@@ -82,6 +82,10 @@ There is no universal "best database." Each category optimizes for a different a
 <strong>Polyglot persistence:</strong> Most production systems use multiple database types. An e-commerce platform might use PostgreSQL for orders (ACID), Redis for sessions (speed), and Elasticsearch for product search (full-text). The key is choosing the right tool for each access pattern.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Instagram chose PostgreSQL over MongoDB early on because their data — users, photos, likes, follows — was highly relational and required strong consistency for features like follower counts and activity feeds. PostgreSQL's ACID guarantees and mature tooling for joins let them scale to hundreds of millions of users on a well-understood stack. They later added Cassandra for direct messages and Redis for caching, embracing polyglot persistence as each access pattern demanded a different tool.
+</div>
+
 ### Choosing a Database — Decision Framework
 
 <span class="label label-ts">TypeScript</span>
@@ -140,6 +144,10 @@ Caching sits between your application and the database, trading memory for speed
 
 <div class="callout info">
 <strong>Cache-aside</strong> is the most common pattern because it's simple, the application controls the logic, and it works with any cache and database combination. Start here unless you have a specific reason not to.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Twitter uses Redis extensively to cache user timelines, avoiding expensive fan-out queries against their storage layer on every page load. When a user opens their home timeline, Twitter serves it from a pre-computed Redis cache rather than assembling it from thousands of followed accounts in real time. This cache-aside approach lets them handle over 400,000 timeline reads per second while keeping median latency under 5 ms.
 </div>
 
 ### Cache-Aside with Redis
@@ -294,6 +302,10 @@ new_key = get_versioned_key("product", "42")     # "product:42:v1"
 <strong>The thundering herd problem:</strong> When a popular cache key expires, hundreds of concurrent requests all miss the cache and hit the database simultaneously. Mitigate with <em>cache stampede locks</em> (only one request rebuilds the cache) or <em>stale-while-revalidate</em> (serve stale data while one request refreshes in the background).
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Facebook faced severe thundering herd problems with Memcached when popular cache keys expired simultaneously across their fleet. They built a system called "lease tokens" — when a cache miss occurs, only the first request gets a lease to rebuild the cache, while subsequent requests either wait briefly or receive a slightly stale value. This event-based invalidation approach with stampede protection allowed them to serve billions of requests per day without overwhelming their MySQL backends.
+</div>
+
 ---
 
 ## 4. Sharding
@@ -421,6 +433,10 @@ print(ring.get_node("user:bob"))    # → "shard-a"
 <strong>Shard key selection rules of thumb:</strong> (1) High cardinality — avoid keys with few distinct values. (2) Even distribution — avoid keys that cluster (e.g., country code if 80% of users are in one country). (3) Query alignment — the shard key should appear in your most common queries to avoid scatter-gather.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Discord shards their message storage by <code>guild_id</code> (server ID), ensuring all messages for a given server live on the same database node. This shard key aligns perfectly with their most common query — "fetch recent messages in this channel" — since channels belong to guilds, eliminating cross-shard queries. When they migrated from MongoDB to Cassandra, they kept this sharding strategy and used <code>channel_id</code> as the partition key with <code>message_id</code> as the clustering key, enabling efficient time-ordered scans within a single partition.
+</div>
+
 
 ---
 
@@ -529,6 +545,10 @@ value = await quorum_read("user:42", ["node-a", "node-b", "node-c"], 2)
 <strong>Quorum formula:</strong> With N replicas, if W (write quorum) + R (read quorum) > N, every read is guaranteed to see at least one replica that has the latest write. Common configurations: N=3, W=2, R=2 (balanced) or N=3, W=3, R=1 (fast reads, slower writes).
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> A major European bank uses PostgreSQL leader-follower replication to separate transactional writes from analytical reads. All account transactions (deposits, transfers, payments) go to the leader with full ACID guarantees, while customer-facing dashboards and reporting queries run against two read replicas. This pattern lets them handle 50,000 balance inquiries per minute without adding load to the leader, while using read-your-writes routing to ensure customers always see their most recent transaction.
+</div>
+
 ---
 
 ## 6. Data Pipelines
@@ -619,6 +639,10 @@ async def batch_pipeline(date: str) -> None:
 
 <div class="callout tip">
 <strong>When to choose streaming over batch:</strong> If your business decision depends on data being <em>minutes</em> old, batch is fine. If it depends on data being <em>seconds</em> old (fraud detection, stock trading, real-time personalization), you need streaming. Most systems use both — streaming for hot-path alerts and batch for historical analytics.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Spotify uses massive batch pipelines (powered by Google Cloud Dataflow and Apache Beam) to generate its Discover Weekly playlists every Monday. The pipeline processes billions of listening events, applies collaborative filtering models, and writes personalised 30-track playlists for over 500 million users. They chose batch over streaming because playlist freshness on a weekly cadence doesn't require real-time processing, and batch lets them run expensive ML models cost-effectively over the full dataset.
 </div>
 
 
@@ -747,6 +771,10 @@ class MonotonicReadRouter:
 <strong>These patterns are not free.</strong> Read-your-writes increases leader load. Monotonic reads reduce load-balancing flexibility. Both are targeted fixes — apply them where users notice inconsistency (profile pages, dashboards), not globally.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> LinkedIn applies read-your-writes consistency for profile edits — when a user updates their headline or job title, their subsequent page loads are routed to the leader database so they immediately see the change. However, other users viewing that profile are served from replicas with eventual consistency, since a few seconds of staleness is acceptable for third-party viewers. This targeted approach lets LinkedIn avoid routing all reads to the leader while eliminating the most confusing user-facing inconsistency.
+</div>
+
 ---
 
 ## 8. ACID vs BASE
@@ -839,6 +867,10 @@ async def transfer(from_id: str, to_id: str, amount: float) -> None:
 
 <div class="callout info">
 <strong>When to choose which:</strong> Use ACID when correctness is non-negotiable — financial transactions, inventory management, booking systems. Use BASE when availability and scale matter more than instant consistency — social feeds, analytics counters, recommendation engines. Many systems use both: ACID for the order database, BASE for the product catalog cache.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Stripe processes billions of dollars in payments and relies on ACID transactions in PostgreSQL to ensure that every charge, refund, and transfer is atomic — money never appears or disappears due to partial failures. In contrast, Twitter's like counts and retweet numbers use BASE semantics with eventual consistency across Cassandra replicas, because showing 10,003 likes instead of 10,005 for a few seconds is an acceptable trade-off for the ability to handle millions of interactions per minute without coordination overhead.
 </div>
 
 ---

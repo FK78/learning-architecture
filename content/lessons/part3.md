@@ -56,6 +56,10 @@ quiz:
 
 In a traditional architecture, services call each other directly. In an event-driven architecture, services communicate by **producing and consuming events**. The producer doesn't know who's listening.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Uber's trip processing system uses event-driven architecture to coordinate across dozens of microservices. When a ride is completed, a "TripCompleted" event is published and consumed independently by billing, driver payments, rider receipts, surge pricing, and analytics services. This decoupling allowed Uber to scale from handling thousands to millions of trips per day without services needing to know about each other.
+</div>
+
 ### Direct Calls vs Events
 
 <span class="bad">Direct calls (tight coupling):</span> <span class="label label-ts">TypeScript</span>
@@ -154,6 +158,10 @@ interface OrderPlaced {
 
 Two different infrastructure patterns for moving messages between services:
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> LinkedIn built Apache Kafka to solve their activity feed problem. They needed hundreds of services to consume the same user activity events (profile views, connection requests, job applications) independently and at their own pace. A traditional message queue would have required duplicating messages for each consumer. Kafka's persistent log with consumer groups let each team read the same stream without interfering with others, processing over a trillion messages per day.
+</div>
+
 ### Message Queue (SQS, RabbitMQ)
 
 ```text
@@ -223,6 +231,10 @@ for event in stream.consume("orders", group="analytics"):
 
 When you scale a service to multiple instances, how do you prevent the same message being processed twice?
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Stripe's payment processing system handles idempotency as a core design principle. Every API request accepts an idempotency key, so if a network failure causes a client to retry a payment charge, Stripe recognizes the duplicate and returns the original result instead of charging the customer twice. This pattern is critical at scale — Stripe processes billions of API requests where even a tiny percentage of duplicates would mean real money lost.
+</div>
+
 ### Consumer Groups
 
 **Queues** handle this automatically — multiple instances of the email service compete for messages. Each message goes to exactly one instance:
@@ -283,6 +295,10 @@ async function handleSendEmail(event: OrderPlaced) {
 ## CQRS — Command Query Responsibility Segregation
 
 CQRS separates your system into two sides: one optimized for **writing** data, another optimized for **reading** data.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> A large retail banking app separated its transaction processing (writes) from account balance and statement views (reads) using CQRS. Writes went through a normalized, ACID-compliant command model that enforced business rules like overdraft limits. Reads were served from denormalized, pre-computed projections optimized for the mobile app's dashboard — showing balances, recent transactions, and spending summaries without any JOINs. This let them scale the read side to handle 50x more traffic during peak hours without impacting transaction processing.
+</div>
 
 ### Why?
 
@@ -454,6 +470,10 @@ class OrderSummaryQuery {
 
 Instead of storing the **current state** of an entity, you store the **sequence of events** that led to that state. The event log is the source of truth.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> LMAX Exchange, a financial trading platform, uses event sourcing to store every trade, order placement, and cancellation as an immutable event. This gives them a complete audit trail required by financial regulators and the ability to reconstruct the exact state of any account at any point in time. When they needed to investigate a disputed trade, they replayed events up to that millisecond to see exactly what happened — something impossible with a traditional database that only stores current state.
+</div>
+
 ### Traditional vs Event Sourced
 
 **Traditional:** Store current state, overwrite on change.
@@ -585,6 +605,10 @@ class Order:
 ## Saga Pattern
 
 When a business process spans multiple services, you can't use a traditional database transaction. A **Saga** breaks the process into steps, each with a **compensating action** to undo it if a later step fails.
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> An airline booking platform like Expedia coordinates flights, hotels, and car rentals across separate provider services using the Saga pattern. When a customer books a vacation package, the system reserves a flight, then a hotel, then a rental car. If the car rental fails (no availability), compensating actions automatically cancel the hotel reservation and release the flight seat. They use an orchestrator service to manage the multi-step workflow, making it easy to track which step failed and ensure all compensations execute correctly.
+</div>
 
 ### Example: Place Order
 

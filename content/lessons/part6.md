@@ -179,6 +179,10 @@ print(ring.get_node("user-108"))
   <strong>Why consistent hashing matters:</strong> When you add or remove a server, only a fraction of keys get remapped — not all of them. This is why it's used in distributed caches (Memcached, Redis Cluster) and databases (DynamoDB, Cassandra).
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Twitch, the live video streaming platform, uses consistent hashing in their load balancing layer to route viewers of the same stream to the same set of edge servers. This ensures that the cached video segments for a popular stream are reused efficiently rather than fetched repeatedly from origin. When they add capacity during a major esports event, consistent hashing ensures only a small fraction of viewer connections are redistributed — minimizing buffering interruptions for millions of concurrent viewers.
+</div>
+
 ## Auto-Scaling
 
 Scaling means adding capacity to handle more load. There are two directions:
@@ -253,6 +257,10 @@ def evaluate_scaling(metrics: ScalingMetrics, current_instances: int) -> int:
   <strong>Cooldown periods</strong> are critical. After scaling up, wait 2–5 minutes before evaluating again. Without cooldowns, you get "thrashing" — rapidly adding and removing instances as metrics oscillate.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Amazon.com uses predictive auto-scaling combined with scheduled scaling to handle Black Friday and Prime Day traffic. Weeks before the event, their systems analyze historical traffic patterns and pre-scale infrastructure. During the event, target-tracking policies maintain CPU utilization around 60%, while step scaling adds aggressive capacity if latency spikes. After the event, conservative scale-down policies with long cooldown periods gradually reduce capacity over hours — not minutes — to avoid premature termination during late-night shopping surges.
+</div>
+
 ## CDNs (Content Delivery Networks)
 
 A CDN is a globally distributed network of edge servers that cache content close to users.
@@ -305,6 +313,10 @@ CDNs are evolving beyond caching. Edge compute (Cloudflare Workers, Lambda@Edge,
 
 <div class="callout tip">
   <strong>Think of CDNs in layers:</strong> static assets (always cache), semi-dynamic content (short TTL), dynamic API responses (usually don't cache, but edge compute can help).
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Netflix operates its own CDN called Open Connect, with thousands of servers embedded directly inside ISP networks worldwide. When you press play, the video streams from a server physically located in your ISP's data center — not from Netflix's AWS origin. Netflix pre-positions popular content at edge locations during off-peak hours based on viewing predictions. This architecture serves over 15% of global internet traffic with sub-50ms latency for most users, while dramatically reducing Netflix's bandwidth costs.
 </div>
 
 ## Containers & Orchestration
@@ -390,6 +402,10 @@ spec:
 
 <div class="callout info">
   <strong>You don't always need Kubernetes.</strong> For small teams or simple workloads, managed services like AWS ECS/Fargate, Google Cloud Run, or even a single server with Docker Compose are simpler. K8s shines when you have many services, complex networking, and need fine-grained control.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Spotify migrated from a fleet of hand-managed VMs to Kubernetes over several years. They had over 150 engineering teams deploying independently, and their VM-based infrastructure couldn't keep up — provisioning took hours, and each team's deployment process was slightly different. By moving to Kubernetes, they standardized deployments across all teams using a shared platform called Backstage. Developers now deploy containerized services in minutes instead of hours, and Spotify can run thousands of microservices with consistent resource management, health checking, and auto-scaling.
 </div>
 
 ## Infrastructure as Code (IaC)
@@ -480,6 +496,10 @@ This eliminates configuration drift entirely. Every server is identical because 
   <strong>Terraform workflow:</strong> <code>terraform plan</code> shows what will change. <code>terraform apply</code> makes it happen. Always review the plan before applying — especially in production.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> HashiCorp (the creators of Terraform) published a case study on how Starbucks manages over 30,000 stores' worth of cloud infrastructure using Terraform. Before IaC, spinning up infrastructure for a new store initiative took weeks of manual AWS console work and was error-prone. With Terraform modules, they codified reusable patterns for common store infrastructure — networking, databases, compute — and new environments can be provisioned in minutes via pull request. Every change is peer-reviewed, version-controlled, and automatically applied through their CI pipeline.
+</div>
+
 ## CI/CD Pipelines
 
 CI/CD automates the path from code commit to production deployment.
@@ -559,6 +579,10 @@ def route_request(canary_percent: int = 5) -> str:
   <strong>Blue-green vs canary:</strong> Blue-green is all-or-nothing — you switch 100% of traffic at once. Canary is gradual — you slowly shift traffic. Canary is safer for high-traffic systems because a bug only affects a small percentage of users initially.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Facebook (Meta) uses a canary deployment system for every code push to their billions-of-users platform. New code is first deployed to internal employees only, then to 1% of production traffic, then 10%, then 100% — with automated metrics checks at each stage. In one notable incident, a canary deployment caught a memory leak that would have crashed servers globally — the 1% canary showed memory usage climbing 5x faster than normal, and the deployment was automatically rolled back before it reached the wider user base. This system lets Facebook deploy code multiple times per day with confidence.
+</div>
+
 ## Multi-Region & Disaster Recovery
 
 ### Why Multi-Region?
@@ -608,6 +632,10 @@ Two metrics that define your disaster recovery requirements:
 
 <div class="callout info">
   <strong>Choose based on business impact.</strong> A blog can tolerate hours of downtime. A payment system cannot. The cost of DR should be proportional to the cost of downtime.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> During the 2017 AWS us-east-1 S3 outage, companies with single-region architectures went completely offline for hours — including major sites like Trello, Quora, and parts of Apple's ecosystem. Netflix, however, stayed online because they run an active-active multi-region architecture across three AWS regions. Their Zuul gateway automatically routes traffic away from unhealthy regions, and their data layer uses Cassandra with cross-region replication. The tradeoff is significant operational complexity and roughly 3x infrastructure cost, but for a service where every minute of downtime costs millions in lost revenue, the investment pays for itself.
 </div>
 
 <span class="label label-ts">TypeScript</span>

@@ -53,6 +53,10 @@ Separate **functional requirements** (what the system does) from **non-functiona
 Always ask clarifying questions first. The biggest mistake is jumping straight to boxes and arrows before understanding what you are building.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> When Google designed Google Maps' real-time traffic system, they started not with architecture but with requirements: sub-second latency for route recalculation, global coverage across 220+ countries, and the ability to ingest GPS data from billions of Android devices. This requirements-first approach led them to a streaming architecture with edge-computed traffic tiles rather than a simpler batch system — a decision that would have been wrong without first quantifying the latency and scale constraints.
+</div>
+
 ### Phase 2: Capacity Estimation (Back-of-Envelope)
 
 Rough numbers keep you honest. A system serving 100 reads/sec has very different needs from one serving 100K reads/sec.
@@ -210,6 +214,10 @@ Cache policy: **Read-through with TTL**. On redirect, check cache first → on m
 - **Redis cluster** with consistent hashing for cache sharding.
 - **Analytics decoupled** via Kafka — redirect latency is not affected by analytics writes.
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Bitly handles over 10 billion link redirects per month using a read-optimized architecture strikingly similar to this design. They use a distributed key-value store for URL lookups, a Redis caching layer that serves the vast majority of redirects without hitting the database, and a separate analytics pipeline that asynchronously processes click events. Their 301 redirect latency stays under 20 ms at the 99th percentile because the hot path — cache lookup and redirect — is completely decoupled from analytics processing.
+</div>
+
 ---
 
 ## 3. Design: Chat Application
@@ -360,6 +368,10 @@ For most chat apps, **fan-out on write** for groups up to a few hundred members,
 The hardest part of chat at scale is not message storage — it is <strong>connection routing</strong>. Knowing which of 200 gateway nodes holds a given user's WebSocket is the core coordination problem.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> WhatsApp handles over 100 billion messages per day with a remarkably lean architecture. They use Erlang/BEAM for their connection gateways, which can hold millions of concurrent WebSocket connections per node due to Erlang's lightweight process model. Messages are stored in Mnesia (for transient data) and Cassandra (for persistent history), and they route messages between gateway nodes using a custom protocol rather than a general-purpose message bus. Their team of fewer than 50 engineers supported 2 billion users by keeping the architecture simple and optimizing the connection layer relentlessly.
+</div>
+
 ---
 
 ## 4. Design: E-Commerce Order System
@@ -505,6 +517,10 @@ async function onOrderCreated(event: OrderCreated): Promise<void> {
 | Circuit Breaker | Part 6 | Wraps calls to external payment gateway |
 | Structured Logging | Part 7 | Correlation ID flows through all events |
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Shopify processes millions of orders during flash sales like Black Friday, where their peak hit 700,000 orders per minute. Their order system uses an event-driven architecture with a saga-like pattern: when a customer checks out, the order service emits domain events that trigger payment processing, inventory reservation, and shipping label generation as independent, loosely coupled steps. Compensating transactions handle failures — if payment declines after inventory is reserved, an <code>InventoryReleased</code> event frees the stock. This choreography-based approach lets each service scale independently and degrade gracefully under extreme load.
+</div>
+
 ---
 
 ## 5. Common Patterns Cheat Sheet
@@ -532,6 +548,10 @@ A quick-reference mapping problems to the patterns covered in this series:
 No pattern exists in isolation. The e-commerce design above uses <strong>seven</strong> patterns together. The skill is knowing which to combine and when the added complexity is justified.
 </div>
 
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Netflix's architecture is a textbook example of composing multiple patterns. They use CQRS to separate their content catalog reads (served from a denormalized cache) from editorial writes, circuit breakers (via Hystrix, which they open-sourced) to isolate failures between their 700+ microservices, event sourcing for their A/B testing platform to replay experiment assignments, and saga orchestration for their subscription billing flow. No single pattern solves their problems — it's the deliberate combination, applied where each is justified, that lets them stream to 260 million subscribers with 99.99% availability.
+</div>
+
 ---
 
 ## 6. How to Approach System Design Interviews
@@ -556,6 +576,10 @@ No pattern exists in isolation. The e-commerce design above uses <strong>seven</
 
 <div class="callout info">
 Interviewers are not looking for the "right" answer. They want to see structured thinking, awareness of trade-offs, and the ability to go deep when it matters.
+</div>
+
+<div class="callout tip">
+  <strong>Real-World Example:</strong> Amazon's internal system design review process (called "operational readiness reviews") mirrors the interview framework almost exactly. Before launching any new service, teams must present capacity estimates, architecture diagrams, deep dives on failure modes, and explicit trade-off documentation. The review board challenges assumptions with questions like "what happens when your primary database fails?" and "show me the back-of-envelope math for your storage growth." This structured process is why Amazon's interview loop emphasizes the same skills — it directly reflects how they build production systems.
 </div>
 
 ### Common Mistakes to Avoid
