@@ -535,6 +535,178 @@ async function emailWorker() {
   <strong>For a simple system, you can skip the queue</strong> and have the email service send directly when it gets the event. The queue becomes useful when you need retry guarantees, rate limiting (email providers have send limits), or buffering during traffic spikes.
 </div>
 
+## Guaranteeing Eventual Delivery
+
+In a distributed system, things fail: the network drops, a service crashes, a database times out. How do you make sure messages and events are never lost?
+
+### The Dual-Write Problem
+
+The most common bug in event-driven systems: you save to the database and publish an event, but one succeeds and the other fails.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// DANGEROUS: dual-write
+async placeOrder(order: Order) {
+  await db.query("INSERT INTO orders ...", [order]);  // succeeds
+  await kafka.publish("OrderPlaced", order);           // fails! network error
+  // Order is saved but no event was published.
+  // Downstream services never know about this order.
+}
+```
+
+### The Outbox Pattern
+
+The fix: don't publish events directly. Write the event to an **outbox table** in the same database transaction as your data. A separate process reads the outbox and publishes to Kafka.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// SAFE: outbox pattern
+async placeOrder(order: Order) {
+  await db.transaction(async (tx) => {
+    // Both writes in the same transaction: both succeed or both fail
+    await tx.query("INSERT INTO orders ...", [order]);
+    await tx.query(
+      "INSERT INTO outbox (event_type, payload, published) VALUES ($1, $2, false)",
+      ["OrderPlaced", JSON.stringify(order)]
+    );
+  });
+  // No Kafka call here. The transaction guarantees both rows exist.
+}
+
+// Separate process: outbox publisher (runs on a schedule or continuously)
+async function publishOutbox() {
+  const events = await db.query(
+    "SELECT * FROM outbox WHERE published = false ORDER BY created_at LIMIT 100"
+  );
+  for (const event of events.rows) {
+    await kafka.publish(event.event_type, JSON.parse(event.payload));
+    await db.query("UPDATE outbox SET published = true WHERE id = $1", [event.id]);
+  }
+}
+```
+
+```text
+Order Service                    Outbox Table              Kafka
+     │                               │                       │
+     ├── INSERT order ───────────────►│                       │
+     ├── INSERT outbox event ────────►│                       │
+     │   (same transaction)           │                       │
+     │                                │                       │
+     │              Outbox Publisher ──┤                       │
+     │              (polls or CDC)    ├── publish event ──────►│
+     │                                ├── mark as published   │
+```
+
+<div class="callout info">
+  <strong>Change Data Capture (CDC)</strong> is an alternative to polling the outbox. Tools like Debezium watch the database transaction log and automatically publish new outbox rows to Kafka. No polling delay, no missed events.
+</div>
+
+### Dead Letter Queues
+
+When a message fails processing repeatedly, you don't want it blocking the queue forever. A **dead letter queue (DLQ)** catches these failed messages for investigation.
+
+```text
+Main Queue                          Dead Letter Queue
+┌──────────┐                        ┌──────────┐
+│ message A │──→ Worker: success ✓   │          │
+│ message B │──→ Worker: fail        │          │
+│           │──→ Worker: fail (retry)│          │
+│           │──→ Worker: fail (retry)│ message B│ ← moved here after 3 failures
+└──────────┘                        └──────────┘
+```
+
+<span class="label label-ts">TypeScript</span> - SQS dead letter queue config:
+
+```typescript
+// When creating the queue, configure the DLQ
+await sqs.createQueue({
+  QueueName: "order-emails",
+  Attributes: {
+    RedrivePolicy: JSON.stringify({
+      deadLetterTargetArn: "arn:aws:sqs:eu-west-1:123456:order-emails-dlq",
+      maxReceiveCount: "3"  // after 3 failed attempts, move to DLQ
+    })
+  }
+});
+
+// Monitor the DLQ: alert if messages appear
+// These are messages that need human investigation
+```
+
+<div class="callout tip">
+  <strong>Always set up DLQ monitoring.</strong> A growing DLQ means something is broken. Common causes: malformed messages, downstream service permanently down, or a bug in the consumer. Fix the root cause, then replay the DLQ messages.
+</div>
+
+### Durable Queues and Persistence
+
+By default, most message brokers persist messages to disk so they survive restarts:
+
+| Broker | Durability | How |
+|---|---|---|
+| **SQS** | Durable by default | Messages stored redundantly across multiple AZs |
+| **RabbitMQ** | Optional | Mark queues and messages as `durable`. Without it, a restart loses everything |
+| **Kafka** | Durable by default | Messages written to disk, replicated across brokers |
+
+<span class="label label-ts">TypeScript</span> - RabbitMQ durable queue:
+
+```typescript
+// Create a durable queue (survives broker restart)
+await channel.assertQueue("order-emails", { durable: true });
+
+// Publish a persistent message (written to disk, not just memory)
+channel.sendToQueue("order-emails", Buffer.from(JSON.stringify(task)), {
+  persistent: true
+});
+```
+
+### Replay Handling
+
+When things go wrong, you need to reprocess messages. How depends on your infrastructure:
+
+**Event streams (Kafka):** Reset the consumer's offset to replay from any point.
+
+```typescript
+// Replay all events from the beginning
+const consumer = kafka.consumer({ groupId: "search-indexer-rebuild" });
+await consumer.subscribe({ topic: "order-events", fromBeginning: true });
+// Processes every event ever published
+```
+
+**Queues (SQS):** Messages are deleted after processing, so you can't replay from the queue. Instead, replay from the DLQ or re-publish from the outbox.
+
+```typescript
+// Replay failed messages from the DLQ
+const dlqMessages = await sqs.receiveMessage({ QueueUrl: DLQ_URL });
+for (const msg of dlqMessages.Messages ?? []) {
+  // Move back to the main queue for reprocessing
+  await sqs.sendMessage({ QueueUrl: MAIN_QUEUE_URL, MessageBody: msg.Body });
+  await sqs.deleteMessage({ QueueUrl: DLQ_URL, ReceiptHandle: msg.ReceiptHandle });
+}
+
+// Or replay from the outbox table
+const missed = await db.query(
+  "SELECT * FROM outbox WHERE published = false AND created_at > $1",
+  [sinceTimestamp]
+);
+```
+
+### Summary: Delivery Guarantees
+
+| Pattern | What it solves |
+|---|---|
+| **Outbox pattern** | Prevents data saved but event lost (dual-write problem) |
+| **Dead letter queue** | Catches messages that fail repeatedly for investigation |
+| **Durable queues** | Messages survive broker restarts |
+| **Replay (streams)** | Reprocess events from any point in time |
+| **Replay (DLQ/outbox)** | Reprocess failed or missed messages |
+| **Idempotent consumers** | Makes all of the above safe to retry |
+
+<div class="callout tip">
+  <strong>These patterns work together.</strong> The outbox guarantees the event is published. Durable queues guarantee it's not lost in transit. The DLQ catches processing failures. Idempotent consumers make retries safe. Each layer covers a different failure mode.
+</div>
+
 ## Multiple Consumers and Idempotency
 
 When you scale a service to multiple instances, how do you prevent the same message being processed twice?
