@@ -351,6 +351,44 @@ Before any design, data starts as one big flat table with everything repeated �
   <strong>Denormalized ≠ unnormalized.</strong> Denormalization is a deliberate choice — the normalized tables remain the source of truth (write side), and the denormalized table is a pre-computed view (read side) kept in sync via events.
 </div>
 
+### Read Tables in Practice
+
+You create actual tables (or even a separate database) shaped for how the UI reads data. One read table per view is common:
+
+```text
+WRITE SIDE (one normalized database):
+  customers, orders, order_items, products
+
+READ SIDE (separate tables, one per view):
+  order_summaries        → "My Orders" page
+  product_bestsellers    → "Top Products" dashboard
+  customer_activity_feed → admin "Recent Activity" view
+```
+
+Each table is shaped exactly for its query — no JOINs at read time. All are updated by event handlers listening to the same events:
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+eventBus.subscribe("OrderPlaced", async (event) => {
+  // Update three different read tables from one event
+  await readDb.query("INSERT INTO order_summaries ...", [...]);
+
+  for (const item of event.items) {
+    await readDb.query(
+      "UPDATE product_bestsellers SET units_sold = units_sold + $1 WHERE product_id = $2",
+      [item.quantity, item.productId]
+    );
+  }
+
+  await readDb.query("INSERT INTO customer_activity_feed ...", [...]);
+});
+```
+
+<div class="callout tip">
+  <strong>The read side doesn't have to be the same database.</strong> You could write to Postgres, read from Elasticsearch for search, and read from Redis for dashboards. Each read store is optimized for its specific query pattern.
+</div>
+
 <span class="label label-ts">TypeScript</span> — Write side:
 
 ```typescript
