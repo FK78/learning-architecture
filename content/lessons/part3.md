@@ -333,6 +333,24 @@ WITH CQRS:
 
 The **write side** uses normalized tables (good for consistency and business rules). The **read side** uses a flat, denormalized table that's updated when events happen — so queries never need JOINs.
 
+### Normalized vs Denormalized — The Progression
+
+Before any design, data starts as one big flat table with everything repeated — Alice's name appears on every row. If she changes her email, you update dozens of rows and risk inconsistency.
+
+**Normalized** splits this into separate tables with no repetition. Alice's email exists once. But reading "Alice's orders with product names" now requires JOINing 3-4 tables.
+
+**Denormalized** intentionally flattens it back into a read-optimized table — but it's derived from the normalized source, kept in sync via events.
+
+| State | What it looks like | Trade-off |
+|---|---|---|
+| **Unnormalized** | One big table, everything repeated | Data inconsistency, update anomalies |
+| **Normalized** | Separate tables, no repetition | Needs JOINs to read, slower queries |
+| **Denormalized** | Flat tables built from normalized data | Redundant data, but fast reads |
+
+<div class="callout info">
+  <strong>Denormalized ≠ unnormalized.</strong> Denormalization is a deliberate choice — the normalized tables remain the source of truth (write side), and the denormalized table is a pre-computed view (read side) kept in sync via events.
+</div>
+
 <span class="label label-ts">TypeScript</span> — Write side:
 
 ```typescript
