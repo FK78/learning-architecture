@@ -405,6 +405,80 @@ eventBus.subscribe("OrderPlaced", async (event) => {
   <strong>The read side doesn't have to be the same database.</strong> You could write to Postgres, read from Elasticsearch for search, and read from Redis for dashboards. Each read store is optimized for its specific query pattern.
 </div>
 
+### Eventual Consistency — The Latency Trade-off
+
+There's always a delay between writing data and the read model catching up. That's **eventual consistency** — typically milliseconds to a few seconds.
+
+In practice, handle it with simple UX patterns:
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// After placing an order, redirect to a confirmation page
+// that reads from the WRITE side (source of truth)
+router.post("/orders", async (req, res) => {
+  const order = await orderService.create(req.body);
+  // Don't redirect to the list page (read model might lag)
+  res.redirect(`/orders/${order.id}/confirmation`);
+});
+
+// The list page uses the read model — by the time the user
+// navigates there, the read model has caught up
+```
+
+<div class="callout info">
+  <strong>For most apps, the lag is invisible.</strong> By the time a user clicks to another page, the read model has caught up. Only high-frequency trading or real-time collaboration apps need to worry about sub-second consistency.
+</div>
+
+### Polyglot Persistence — Different Stores for Different Queries
+
+Different query patterns need different database types. The write side stays as one normalized database; the read side can fan out to multiple stores:
+
+```text
+WRITE SIDE:
+  PostgreSQL (normalized, ACID, business rules)
+
+EVENTS ──→ OrderPlaced, OrderShipped, etc.
+
+READ SIDE (each optimized for its job):
+  ├─ PostgreSQL:    order_summaries  → "My Orders" page
+  ├─ Elasticsearch: products index   → Search ("red shoes under £50")
+  ├─ Redis:         dashboard stats  → Admin dashboard (sub-ms reads)
+  └─ DynamoDB:      activity feed    → High write throughput
+```
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+eventBus.subscribe("OrderPlaced", async (event) => {
+  // Same event, four different stores
+  await postgres.query("INSERT INTO order_summaries ...", [...]);
+
+  await elasticsearch.index("products", {
+    script: { source: "ctx._source.orders += 1" }
+  });
+
+  await redis.hincrby("dashboard:today", "order_count", 1);
+  await redis.hincrbyfloat("dashboard:today", "revenue", event.total);
+
+  await dynamodb.put({
+    TableName: "customer_activity",
+    Item: { customerId: event.customerId, type: "order_placed", timestamp: Date.now() }
+  });
+});
+```
+
+| Problem | Why one DB struggles | Better read store |
+|---|---|---|
+| Full-text search with filters | Postgres `LIKE` is slow | Elasticsearch |
+| Dashboard counters (millions of reads/sec) | Too many queries | Redis |
+| Activity feed (massive write throughput) | Write locks | DynamoDB / Cassandra |
+| Recommendation engine | Needs graph traversal | Neo4j |
+
+<div class="callout">
+  <strong>You only add separate stores when you have a specific performance problem.</strong> For most apps, one Postgres database with a few denormalized read tables is enough. Don't add Elasticsearch on day one — add it when search becomes a bottleneck.
+</div>
+
 <span class="label label-ts">TypeScript</span> — Write side:
 
 ```typescript
