@@ -5,5 +5,5 @@
 </div>
 <div id="overall-score" style="text-align:center;margin-top:1.5rem;font-size:1.2rem;display:none;"></div>
 <script>
-  initQuiz({{ .Page.Params.quiz | jsonify }});
+  initQuiz({{ .Page.Params.quiz | jsonify | safeJS }});
 </script>
