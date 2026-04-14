@@ -5,7 +5,7 @@ linkTitle: "Architecture Learning"
 
 {{< blocks/cover title="Architecture Learning" image_anchor="top" height="med" color="dark" >}}
 <p class="lead mt-4">Software architecture patterns, solutions, and concepts — an interactive learning path.</p>
-<a class="btn btn-lg btn-primary me-3 mb-4" href="{{< relref "/lessons/part1" >}}">
+<a class="btn btn-lg btn-primary me-3 mb-4" href="{{< relref "/lessons/part0" >}}">
   Get Started →
 </a>
 {{< /blocks/cover >}}
@@ -15,6 +15,12 @@ linkTitle: "Architecture Learning"
 ## What You'll Learn
 
 <div class="row">
+<div class="col-lg-4 mb-4">
+
+### Part 0: Prerequisites
+HTTP basics, database fundamentals, OOP concepts, networking, Git, and command line. A quick refresher before diving in.
+
+</div>
 <div class="col-lg-4 mb-4">
 
 ### Part 1: Foundations
