@@ -472,6 +472,69 @@ await kafka.publish("order-events", { type: "OrderPlaced", orderId: "123", ... }
   <strong>Start with queues</strong> when you have simple background tasks (send email, generate PDF). Move to streams when multiple services need the same events, or when you need replay and audit capabilities. Many systems use both: queues for task processing, streams for event broadcasting.
 </div>
 
+### Using Events and Queues Together
+
+In practice, events and queues often work in the same flow. The event broadcasts what happened. The queue handles the specific task with retry guarantees.
+
+```text
+Kafka (event stream)                    SQS (queue)
+
+OrderPlaced event --> Email Service --> [ Email Send Queue ] --> Email Worker
+                  --> Analytics Service                         (retries, rate limits)
+                  --> Search Indexer
+```
+
+The email service consumes the **event** from Kafka (to know an order was placed), then puts a **task** on a queue (to actually send the email with retries):
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// Email service: consumes the EVENT from Kafka
+kafkaConsumer.run({
+  eachMessage: async ({ message }) => {
+    const event = JSON.parse(message.value.toString());
+    if (event.type === "OrderPlaced") {
+      // Puts a TASK on a queue
+      await sqs.sendMessage({
+        QueueUrl: EMAIL_QUEUE_URL,
+        MessageBody: JSON.stringify({
+          to: event.customerEmail,
+          template: "order_confirmation",
+          orderId: event.orderId
+        })
+      });
+    }
+  }
+});
+
+// Email worker: processes the TASK from the queue
+// Handles retries, rate limiting, failures
+async function emailWorker() {
+  const result = await sqs.receiveMessage({ QueueUrl: EMAIL_QUEUE_URL });
+  for (const message of result.Messages ?? []) {
+    try {
+      const task = JSON.parse(message.Body);
+      await sendgrid.send(task.to, task.template, task.data);
+      await sqs.deleteMessage({ QueueUrl: EMAIL_QUEUE_URL, ReceiptHandle: message.ReceiptHandle });
+    } catch {
+      // Don't delete. Message becomes visible again after timeout.
+      // SQS retries automatically. After 3 failures, goes to dead letter queue.
+    }
+  }
+}
+```
+
+| | Event (stream) | Task (queue) |
+|---|---|---|
+| Says | "An order was placed" | "Send this specific email" |
+| Who cares | Anyone who wants to know | One worker that sends emails |
+| If it fails | Other consumers unaffected | Retried automatically |
+| Multiple consumers | Yes, that's the point | No, one worker picks it up |
+
+<div class="callout info">
+  <strong>For a simple system, you can skip the queue</strong> and have the email service send directly when it gets the event. The queue becomes useful when you need retry guarantees, rate limiting (email providers have send limits), or buffering during traffic spikes.
+</div>
+
 ## Multiple Consumers and Idempotency
 
 When you scale a service to multiple instances, how do you prevent the same message being processed twice?
