@@ -1180,7 +1180,7 @@ class PlaceOrderSaga {
 
 ## Putting It All Together
 
-These patterns often combine:
+These patterns rarely exist in isolation. Here's how they combine in a real food delivery app, walking through what happens when a customer places an order:
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -1194,24 +1194,86 @@ These patterns often combine:
                        │ publishes OrderPlaced event
                        ▼
               ┌─────────────────┐
-              │  Event Stream   │ (Kafka / Kinesis)
+              │  Event Stream   │ (Kafka)
               └──┬──────┬───┬──┘
                  │      │   │
          ┌───────▼┐  ┌──▼──┐ ┌▼────────────┐
-         │Inventory│  │Email│ │Read Model   │
-         │Service  │  │Svc  │ │(Projections)│
-         └─────────┘  └─────┘ └──────┬──────┘
-                                     │
-                              ┌──────▼──────┐
-                              │ Query API   │
-                              │ (Read Model)│
-                              └─────────────┘
+         │Payment │  │Email│ │Read Model   │
+         │Service │  │Svc  │ │(Projections)│
+         └───┬────┘  └─────┘ └──────┬──────┘
+             │                      │
+         ┌───▼────┐          ┌──────▼──────┐
+         │Kitchen │          │ Query API   │
+         │Service │          │ (Read Model)│
+         └────────┘          └─────────────┘
 ```
 
-- **Event-driven** — services communicate via events
-- **CQRS** — separate write model (Order Service) and read model (Projections)
-- **Event sourcing** — optionally store events as source of truth
-- **Saga** — coordinate multi-service transactions
+### The Flow: Customer Orders a Burger
+
+**1. Customer taps "Place Order" in the app**
+
+The API Gateway routes the request to the Order Service. This is the **write side** of CQRS.
+
+```typescript
+// Order Service (write side) - validates and saves
+const order = Order.create(customerId, items);
+order.submit();
+await eventStore.save(order.id, order.getUncommittedEvents());
+// Events saved: [OrderCreated, ItemAdded, OrderSubmitted]
+```
+
+If using **event sourcing**, those events are the source of truth. No orders table with a status column. Just events.
+
+**2. OrderPlaced event hits the event stream**
+
+Kafka receives the event. This is the **event-driven** part. The Order Service is done. It doesn't know or care what happens next.
+
+**3. Multiple consumers react independently**
+
+Each service has its own consumer group, processing the same event for different purposes:
+
+- **Payment Service** charges the customer's card. On success, publishes `PaymentTaken`. On failure, publishes `PaymentFailed`.
+- **Email Service** sends an order confirmation. If it fails, the order still proceeds (email is not critical).
+- **Read Model Projector** updates the denormalized `order_summaries` table so the customer can see their order status instantly. This is the **CQRS read side**.
+
+**4. The saga coordinates the multi-step flow**
+
+Payment, kitchen prep, and driver assignment need to happen in order. If any step fails, previous steps must be undone. This is the **saga pattern**:
+
+```text
+OrderPlaced → PaymentTaken → KitchenAccepted → DriverAssigned → OrderDelivered
+                                    ↓ (if kitchen rejects)
+                              PaymentRefunded → OrderCancelled
+```
+
+With choreography, each service listens for the previous step's success event and publishes its own. With orchestration, a central `OrderFulfillmentSaga` class calls each service in sequence.
+
+**5. Customer checks order status**
+
+The app calls the Query API, which reads from the **denormalized read model**. No JOINs, no hitting the write database. Fast, even under heavy load.
+
+```typescript
+// Read side - one simple query, pre-computed by the projector
+const status = await readDb.query(
+  "SELECT * FROM order_tracking WHERE order_id = $1", [orderId]
+);
+// Returns: { status: "preparing", restaurant: "Burger Place", eta: "18 mins" }
+```
+
+### Which Patterns Are Used Where
+
+| What happens | Pattern used | Why |
+|---|---|---|
+| Order saved as events, not rows | Event Sourcing | Full audit trail, can replay state |
+| Write and read use different models | CQRS | Write is normalized, read is fast/flat |
+| Services don't call each other directly | Event-Driven | Loose coupling, independent scaling |
+| Payment then kitchen then driver in sequence | Saga | Distributed transaction with compensation |
+| Kafka retains events for replay | Event Stream | Multiple consumers, replayability |
+| Email service processes independently | Message Consumer | Fire and forget, non-critical |
+
+<div class="callout tip">
+  <strong>You don't need all of these on day one.</strong> Start with a monolith and direct calls. Add events when services need to be decoupled. Add CQRS when reads get slow. Add event sourcing when you need an audit trail. Add sagas when you have multi-service transactions. Each pattern solves a specific problem. Add it when you have that problem.
+</div>
 
 ## Key Takeaways
 
