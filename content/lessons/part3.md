@@ -479,6 +479,51 @@ eventBus.subscribe("OrderPlaced", async (event) => {
   <strong>You only add separate stores when you have a specific performance problem.</strong> For most apps, one Postgres database with a few denormalized read tables is enough. Don't add Elasticsearch on day one — add it when search becomes a bottleneck.
 </div>
 
+### Managing Multiple Read Stores
+
+The write side doesn't run scripts or poll for changes — it just publishes events. Each read store has its own **consumer service** that runs continuously, listening for events and updating its store:
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// search-indexer service — runs 24/7, listens to Kafka
+const consumer = kafka.consumer({ groupId: "search-indexer" });
+await consumer.subscribe({ topic: "orders" });
+
+await consumer.run({
+  eachMessage: async ({ message }) => {
+    const event = JSON.parse(message.value.toString());
+    switch (event.type) {
+      case "OrderPlaced":
+        await elasticsearch.index({
+          index: "orders", id: event.orderId,
+          body: { customerId: event.customerId, total: event.total, status: "placed" }
+        });
+        break;
+      case "OrderShipped":
+        await elasticsearch.update({
+          index: "orders", id: event.orderId,
+          body: { doc: { status: "shipped" } }
+        });
+        break;
+    }
+  }
+});
+```
+
+Each consumer is a separate service responsible for its own store. The write side doesn't know they exist.
+
+| Problem | How it's handled |
+|---|---|
+| Consumer crashes | Kafka remembers the last processed offset. Consumer restarts where it left off. |
+| Consumer falls behind | Catches up at its own pace. Read model is temporarily stale but self-heals. |
+| Rebuild a read store from scratch | Replay all events from the beginning of the log. |
+| Add a new read store later | Deploy a new consumer, start from the beginning — nothing else changes. |
+
+<div class="callout tip">
+  <strong>For simpler setups</strong> (one Postgres for both write and read tables), you don't need Kafka or separate services. The event handler can live in the same app: <code>eventBus.on("OrderPlaced", async (e) => { await db.query("INSERT INTO order_summaries ...") })</code>. Scale up to Kafka when you actually need separate databases.
+</div>
+
 <span class="label label-ts">TypeScript</span> — Write side:
 
 ```typescript
