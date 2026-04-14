@@ -1,0 +1,15 @@
+# Hugo output
+public/
+resources/_gen/
+
+# Hugo local server
+hugo_stats.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
