@@ -1,17 +1,17 @@
 {{ $part := .Get "part" }}
 {{ $audioBase := printf "audio/%s" $part }}
 <script>
-(function() {
+document.addEventListener('DOMContentLoaded', function() {
   const base = {{ printf "%s/" $audioBase | relURL }};
   fetch(base + 'manifest.json')
-    .then(r => r.json())
-    .then(sections => {
-      sections.forEach(s => {
-        // Find the heading that matches this section title
-        const headings = document.querySelectorAll('h2, h3');
-        for (const h of headings) {
+    .then(function(r) { return r.json(); })
+    .then(function(sections) {
+      sections.forEach(function(s) {
+        var headings = document.querySelectorAll('h2, h3');
+        for (var i = 0; i < headings.length; i++) {
+          var h = headings[i];
           if (h.textContent.trim() === s.title) {
-            const btn = document.createElement('button');
+            var btn = document.createElement('button');
             btn.className = 'inline-audio-btn';
             btn.innerHTML = '🔊';
             btn.title = 'Listen to this section';
@@ -23,6 +23,6 @@
         }
       });
     })
-    .catch(() => {});
-})();
+    .catch(function() {});
+});
 </script>
