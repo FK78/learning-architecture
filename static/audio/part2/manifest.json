@@ -1,0 +1,142 @@
+[
+  {
+    "title": "REST Fundamentals",
+    "parent": null,
+    "file": "rest-fundamentals.ogg"
+  },
+  {
+    "title": "Core Principles",
+    "parent": "REST Fundamentals",
+    "file": "rest-fundamentals-core-principles.ogg"
+  },
+  {
+    "title": "HTTP Verbs",
+    "parent": "REST Fundamentals",
+    "file": "rest-fundamentals-http-verbs.ogg"
+  },
+  {
+    "title": "Status Codes",
+    "parent": "REST Fundamentals",
+    "file": "rest-fundamentals-status-codes.ogg"
+  },
+  {
+    "title": "REST in Practice",
+    "parent": null,
+    "file": "rest-in-practice.ogg"
+  },
+  {
+    "title": "URL Design",
+    "parent": "REST in Practice",
+    "file": "rest-in-practice-url-design.ogg"
+  },
+  {
+    "title": "A Practical REST API",
+    "parent": "REST in Practice",
+    "file": "rest-in-practice-a-practical-rest-api.ogg"
+  },
+  {
+    "title": "Pagination",
+    "parent": "REST in Practice",
+    "file": "rest-in-practice-pagination.ogg"
+  },
+  {
+    "title": "Versioning",
+    "parent": "REST in Practice",
+    "file": "rest-in-practice-versioning.ogg"
+  },
+  {
+    "title": "GraphQL",
+    "parent": null,
+    "file": "graphql.ogg"
+  },
+  {
+    "title": "How It Works",
+    "parent": "GraphQL",
+    "file": "graphql-how-it-works.ogg"
+  },
+  {
+    "title": "Key Concepts",
+    "parent": "GraphQL",
+    "file": "graphql-key-concepts.ogg"
+  },
+  {
+    "title": "REST vs GraphQL",
+    "parent": null,
+    "file": "rest-vs-graphql.ogg"
+  },
+  {
+    "title": "When to Use Which",
+    "parent": "REST vs GraphQL",
+    "file": "rest-vs-graphql-when-to-use-which.ogg"
+  },
+  {
+    "title": "Communication Protocols Beyond REST",
+    "parent": null,
+    "file": "communication-protocols-beyond-rest.ogg"
+  },
+  {
+    "title": "gRPC",
+    "parent": "Communication Protocols Beyond REST",
+    "file": "communication-protocols-beyond-rest-grpc.ogg"
+  },
+  {
+    "title": "WebSockets",
+    "parent": "Communication Protocols Beyond REST",
+    "file": "communication-protocols-beyond-rest-websockets.ogg"
+  },
+  {
+    "title": "Server-Sent Events (SSE)",
+    "parent": "Communication Protocols Beyond REST",
+    "file": "communication-protocols-beyond-rest-server-sent-events-sse.ogg"
+  },
+  {
+    "title": "Message-Based Communication",
+    "parent": "Communication Protocols Beyond REST",
+    "file": "communication-protocols-beyond-rest-message-based-communication.ogg"
+  },
+  {
+    "title": "Protocol Comparison",
+    "parent": "Communication Protocols Beyond REST",
+    "file": "communication-protocols-beyond-rest-protocol-comparison.ogg"
+  },
+  {
+    "title": "Domain Modeling",
+    "parent": null,
+    "file": "domain-modeling.ogg"
+  },
+  {
+    "title": "Entity",
+    "parent": "Domain Modeling",
+    "file": "domain-modeling-entity.ogg"
+  },
+  {
+    "title": "Value Object",
+    "parent": "Domain Modeling",
+    "file": "domain-modeling-value-object.ogg"
+  },
+  {
+    "title": "Aggregate",
+    "parent": "Domain Modeling",
+    "file": "domain-modeling-aggregate.ogg"
+  },
+  {
+    "title": "Domain Service",
+    "parent": "Domain Modeling",
+    "file": "domain-modeling-domain-service.ogg"
+  },
+  {
+    "title": "Bounded Contexts",
+    "parent": null,
+    "file": "bounded-contexts.ogg"
+  },
+  {
+    "title": "How Contexts Communicate",
+    "parent": "Bounded Contexts",
+    "file": "bounded-contexts-how-contexts-communicate.ogg"
+  },
+  {
+    "title": "Key Takeaways",
+    "parent": null,
+    "file": "key-takeaways.ogg"
+  }
+]
