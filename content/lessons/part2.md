@@ -398,6 +398,286 @@ const resolvers = {
   <strong>They're not mutually exclusive.</strong> Many teams use REST for simple services and GraphQL as a gateway that aggregates them.
 </div>
 
+## Communication Protocols Beyond REST
+
+REST is the most common API style, but it is not the only way services communicate. As systems grow, different parts of your architecture have different needs: low-latency internal calls, real-time updates, one-way streams, or fully asynchronous messaging. Each protocol has trade-offs, and most production systems use several of them together.
+
+### gRPC
+
+**gRPC** is a high-performance RPC (Remote Procedure Call) framework created by Google. It uses **Protocol Buffers** (protobuf) for serialization and **HTTP/2** for transport.
+
+Why is it faster than REST + JSON?
+
+- **Binary format.** Protobuf encodes data in a compact binary format, producing payloads significantly smaller than JSON.
+- **HTTP/2 multiplexing.** Multiple requests and responses share a single TCP connection, eliminating head-of-line blocking.
+- **Streaming support.** gRPC natively supports server streaming, client streaming, and bidirectional streaming.
+
+#### Defining a Service with Protobuf
+
+A `.proto` file defines your service contract, including messages and RPC methods:
+
+```protobuf
+syntax = "proto3";
+
+package orders;
+
+service OrderService {
+  rpc GetOrder (GetOrderRequest) returns (Order);
+  rpc CreateOrder (CreateOrderRequest) returns (Order);
+  rpc StreamOrderUpdates (GetOrderRequest) returns (stream OrderUpdate);
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message CreateOrderRequest {
+  string customer_id = 1;
+  repeated OrderItem items = 2;
+}
+
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message Order {
+  string id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+  string status = 4;
+  double total = 5;
+}
+
+message OrderUpdate {
+  string order_id = 1;
+  string status = 2;
+  string timestamp = 3;
+}
+```
+
+#### gRPC Server and Client
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+import * as grpc from "@grpc/grpc-js";
+import * as protoLoader from "@grpc/proto-loader";
+
+const packageDef = protoLoader.loadSync("order.proto");
+const proto = grpc.loadPackageDefinition(packageDef).orders as any;
+
+// Server
+const server = new grpc.Server();
+server.addService(proto.OrderService.service, {
+  getOrder: async (call, callback) => {
+    const order = await orderStore.findById(call.request.order_id);
+    callback(null, order);
+  },
+  createOrder: async (call, callback) => {
+    const order = await orderStore.create(call.request);
+    callback(null, order);
+  },
+});
+server.bindAsync("0.0.0.0:50051", grpc.ServerCredentials.createInsecure(), () => {
+  console.log("gRPC server running on port 50051");
+});
+
+// Client
+const client = new proto.OrderService("localhost:50051", grpc.credentials.createInsecure());
+client.getOrder({ order_id: "123" }, (err, order) => {
+  console.log("Order:", order);
+});
+```
+
+<span class="label label-py">Python</span>
+
+```python
+import grpc
+from concurrent import futures
+import order_pb2
+import order_pb2_grpc
+
+# Server
+class OrderServicer(order_pb2_grpc.OrderServiceServicer):
+    async def GetOrder(self, request, context):
+        order = await order_store.find_by_id(request.order_id)
+        return order_pb2.Order(id=order.id, status=order.status, total=order.total)
+
+server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+order_pb2_grpc.add_OrderServiceServicer_to_server(OrderServicer(), server)
+server.add_insecure_port("[::]:50051")
+server.start()
+
+# Client
+channel = grpc.insecure_channel("localhost:50051")
+stub = order_pb2_grpc.OrderServiceStub(channel)
+order = stub.GetOrder(order_pb2.GetOrderRequest(order_id="123"))
+print("Order:", order)
+```
+
+<div class="callout tip">
+  <strong>When to use gRPC:</strong> service-to-service communication, low-latency requirements, streaming data. <strong>When NOT to use:</strong> browser-facing clients (limited browser support for HTTP/2 gRPC), public APIs where developers need to debug with curl or Postman.
+</div>
+
+### WebSockets
+
+**WebSockets** provide a persistent, bidirectional connection between client and server. Unlike HTTP, where the client sends a request and waits for a response, a WebSocket connection stays open and either side can send messages at any time.
+
+How it differs from HTTP:
+
+- HTTP: client opens connection, sends request, gets response, connection closes (or is reused for the next request).
+- WebSocket: client opens connection via an HTTP upgrade handshake, then both sides send messages freely until one side closes the connection.
+
+<span class="label label-ts">TypeScript</span> (using `ws` library)
+
+```typescript
+import { WebSocketServer, WebSocket } from "ws";
+
+// Server
+const wss = new WebSocketServer({ port: 8080 });
+
+wss.on("connection", (ws) => {
+  console.log("Client connected");
+
+  ws.on("message", (data) => {
+    const message = JSON.parse(data.toString());
+    // Broadcast to all connected clients
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ user: message.user, text: message.text }));
+      }
+    });
+  });
+
+  ws.on("close", () => console.log("Client disconnected"));
+});
+
+// Client
+const ws = new WebSocket("ws://localhost:8080");
+ws.on("open", () => ws.send(JSON.stringify({ user: "Alice", text: "Hello!" })));
+ws.on("message", (data) => console.log("Received:", JSON.parse(data.toString())));
+```
+
+<span class="label label-py">Python</span> (using `websockets` library)
+
+```python
+import asyncio
+import websockets
+import json
+
+connected = set()
+
+# Server
+async def handler(websocket):
+    connected.add(websocket)
+    try:
+        async for raw in websocket:
+            message = json.loads(raw)
+            for client in connected:
+                if client.open:
+                    await client.send(json.dumps({"user": message["user"], "text": message["text"]}))
+    finally:
+        connected.discard(websocket)
+
+async def main():
+    async with websockets.serve(handler, "localhost", 8080):
+        await asyncio.Future()  # run forever
+
+# Client
+async def client():
+    async with websockets.connect("ws://localhost:8080") as ws:
+        await ws.send(json.dumps({"user": "Alice", "text": "Hello!"}))
+        response = await ws.recv()
+        print("Received:", json.loads(response))
+```
+
+<div class="callout tip">
+  <strong>Use cases:</strong> real-time chat, live dashboards, notifications, collaborative editing. <strong>When NOT to use:</strong> simple request/response patterns (HTTP is simpler and more widely supported), stateless APIs where connections do not need to persist.
+</div>
+
+### Server-Sent Events (SSE)
+
+**SSE** is a one-way streaming mechanism from server to client over a standard HTTP connection. The client opens a connection, and the server pushes events as they happen. It is simpler than WebSockets when you only need server-to-client updates.
+
+<span class="label label-ts">TypeScript</span> (Express)
+
+```typescript
+import express from "express";
+
+const app = express();
+
+app.get("/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const sendEvent = (data: object) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Send an update every 2 seconds
+  const interval = setInterval(() => {
+    sendEvent({ price: (Math.random() * 100).toFixed(2), timestamp: Date.now() });
+  }, 2000);
+
+  req.on("close", () => clearInterval(interval));
+});
+
+app.listen(3000);
+```
+
+<span class="label label-py">Python</span> (FastAPI)
+
+```python
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+import asyncio, json, random, time
+
+app = FastAPI()
+
+async def event_generator():
+    while True:
+        data = json.dumps({"price": f"{random.uniform(0, 100):.2f}", "timestamp": time.time()})
+        yield f"data: {data}\n\n"
+        await asyncio.sleep(2)
+
+@app.get("/events")
+async def stream_events():
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+```
+
+<div class="callout info">
+  <strong>Use cases:</strong> live feeds, progress updates, stock tickers. SSE reconnects automatically if the connection drops, which WebSockets do not do natively.
+</div>
+
+### Message-Based Communication
+
+Not all communication needs to be synchronous. Services can also communicate via **message queues** (e.g. SQS, RabbitMQ) and **event streams** (e.g. Kafka, EventBridge). This pattern is covered in depth in Part 3.
+
+The key distinction:
+
+| | Synchronous (REST, gRPC) | Asynchronous (Message Queues) |
+|---|---|---|
+| **Caller waits?** | Yes, blocks until response | No, fire and forget |
+| **Coupling** | Caller must know the receiver | Caller publishes to a queue/topic |
+| **Failure handling** | Caller gets an error immediately | Message is retried or dead-lettered |
+| **Best for** | Queries, real-time responses | Background tasks, cross-service events |
+
+### Protocol Comparison
+
+| Protocol | Direction | Format | Connection | Best for |
+|---|---|---|---|---|
+| **REST** | Request/Response | JSON | New per request | CRUD APIs, public APIs |
+| **gRPC** | Request/Response + Streaming | Protobuf | Persistent (HTTP/2) | Service-to-service, low latency |
+| **WebSocket** | Bidirectional | Any | Persistent | Real-time, chat, collaboration |
+| **SSE** | Server to Client | Text | Persistent | Live feeds, notifications |
+| **Message Queue** | Async | Any | N/A | Background tasks, decoupling |
+
+<div class="callout">
+  <strong>Most systems use multiple protocols.</strong> REST for public APIs, gRPC between internal services, WebSockets for real-time features, and message queues for async work.
+</div>
+
 ## Domain Modeling
 
 Domain modeling is about structuring your code around the **business problem**, not the database or UI. It comes from Domain-Driven Design (DDD).

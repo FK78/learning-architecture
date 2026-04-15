@@ -5,41 +5,43 @@ linkTitle: "Part 0: Prerequisites"
 weight: 0
 type: "docs"
 quiz:
-  - question: "A client sends a GET request to /api/users and receives a 200 status code. What does this mean?"
+  - q: "A client sends a GET request to /api/users and receives a 200 status code. What does this mean?"
+    answer: "The GET method requests data from the server. A 200 status code means the request succeeded and the server returned the requested users data. This is the standard request/response cycle of HTTP."
     concepts:
-      - label: "HTTP Status Codes"
-        terms:
-          - "200 OK"
-          - "GET method"
-          - "Request/response cycle"
-  - question: "You have a 'customers' table and an 'orders' table. Each order has a customer_id column. What type of key is customer_id in the orders table, and how would you retrieve all orders with their customer names?"
+      - label: "HTTP methods and status codes"
+        terms: ["200", "ok", "success", "get", "request", "response", "retrieve", "read"]
+      - label: "request/response cycle"
+        terms: ["client", "server", "send", "return", "cycle", "request"]
+  - q: "You have a 'customers' table and an 'orders' table. Each order has a customer_id column. What type of key is customer_id in the orders table, and how would you retrieve all orders with their customer names?"
+    answer: "customer_id is a foreign key. It references the primary key (id) of the customers table. To get orders with customer names, use a JOIN: SELECT c.name, o.total FROM orders o JOIN customers c ON o.customer_id = c.id."
     concepts:
-      - label: "Relational Databases"
-        terms:
-          - "Foreign key"
-          - "JOIN"
-          - "SELECT"
-  - question: "Why does dependency injection matter in software architecture? What would happen if every class created its own dependencies internally?"
+      - label: "foreign key"
+        terms: ["foreign key", "foreign", "reference", "relationship", "relates", "points to"]
+      - label: "JOIN query"
+        terms: ["join", "select", "combine", "link", "connect"]
+  - q: "Why does dependency injection matter in software architecture? What would happen if every class created its own dependencies internally?"
+    answer: "Dependency injection lets you swap implementations without changing the class. If classes create their own dependencies, they are tightly coupled to specific implementations, making them hard to test (can't use mocks) and hard to change (swapping a database means editing every class that uses it)."
     concepts:
-      - label: "OOP and Dependency Injection"
-        terms:
-          - "Interfaces"
-          - "Dependency injection"
-          - "Loose coupling"
-  - question: "A function call inside your application takes nanoseconds. A call to another service over the network takes milliseconds. How does this difference influence architecture decisions?"
+      - label: "loose coupling"
+        terms: ["loose", "coupl", "decouple", "swap", "replace", "flexible", "change"]
+      - label: "testability"
+        terms: ["test", "mock", "fake", "stub", "inject", "pass in"]
+      - label: "interface/abstraction"
+        terms: ["interface", "abstract", "contract", "implementation"]
+  - q: "A function call inside your application takes nanoseconds. A call to another service over the network takes milliseconds. How does this difference influence architecture decisions?"
+    answer: "The million-times difference means every network call has a real cost. This is why you batch requests, use caching, think carefully about service boundaries, and avoid unnecessary network hops. Splitting a monolith into microservices adds network calls between every component."
     concepts:
-      - label: "Networking and Latency"
-        terms:
-          - "Latency"
-          - "Client-server model"
-          - "Network overhead"
-  - question: "Your team uses Git with feature branches and pull requests. How does this workflow connect to CI/CD and deployment strategies?"
+      - label: "latency awareness"
+        terms: ["latency", "slow", "millisecond", "nanosecond", "time", "cost", "overhead", "million"]
+      - label: "architecture implications"
+        terms: ["cache", "batch", "service boundar", "network call", "microservice", "monolith", "split"]
+  - q: "Your team uses Git with feature branches and pull requests. How does this workflow connect to CI/CD and deployment strategies?"
+    answer: "Each pull request can trigger automated builds and tests (CI). When merged to main, it can trigger automated deployment (CD). Branching strategies enable deployment patterns like blue-green (deploy to inactive environment, switch traffic) and canary (deploy to a small percentage of users first)."
     concepts:
-      - label: "Version Control and Deployment"
-        terms:
-          - "Branching"
-          - "Pull requests"
-          - "CI/CD"
+      - label: "CI/CD pipeline"
+        terms: ["ci", "cd", "continuous", "automat", "pipeline", "build", "test", "deploy"]
+      - label: "deployment strategies"
+        terms: ["blue-green", "canary", "branch", "merge", "release", "rollback"]
 ---
 
 # Part 0: Prerequisites
@@ -85,14 +87,60 @@ Three headers you will see constantly:
 
 ### JSON
 
-JSON is the standard format for API communication. It is human-readable and maps directly to objects in most languages.
+JSON (JavaScript Object Notation) is the standard format for API communication. It is human-readable and maps directly to objects in most languages.
 
-### Example Request and Response
+```json
+{
+  "id": 42,
+  "name": "Alice",
+  "email": "alice@example.com",
+  "orders": [
+    { "id": 1, "total": 59.99 },
+    { "id": 2, "total": 24.50 }
+  ]
+}
+```
+
+Key rules: strings use double quotes, no trailing commas, keys are always strings. Nested objects and arrays are supported.
+
+### Request and Response in Detail
+
+Every HTTP interaction has the same structure:
+
+```text
+REQUEST:
+  Method + URL:     GET /api/users/42
+  Headers:          Accept: application/json
+                    Authorization: Bearer token123
+  Body:             (empty for GET)
+
+RESPONSE:
+  Status:           200 OK
+  Headers:          Content-Type: application/json
+  Body:             { "id": 42, "name": "Alice" }
+```
+
+For requests that send data (POST, PUT, PATCH), the body contains the payload:
+
+```text
+REQUEST:
+  Method + URL:     POST /api/users
+  Headers:          Content-Type: application/json
+  Body:             { "name": "Bob", "email": "bob@example.com" }
+
+RESPONSE:
+  Status:           201 Created
+  Headers:          Content-Type: application/json
+                    Location: /api/users/43
+  Body:             { "id": 43, "name": "Bob", "email": "bob@example.com" }
+```
+
+### Example in Code
 
 <span class="label label-ts">TypeScript</span>
 
 ```typescript
-// Request
+// GET request: retrieve a user
 const response = await fetch('https://api.example.com/users/42', {
   method: 'GET',
   headers: {
@@ -100,11 +148,56 @@ const response = await fetch('https://api.example.com/users/42', {
     'Authorization': 'Bearer token123'
   }
 });
-
-// Response: 200 OK
+// response.status = 200
 const user = await response.json();
 // { "id": 42, "name": "Alice", "email": "alice@example.com" }
+
+// POST request: create a user
+const createResponse = await fetch('https://api.example.com/users', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer token123'
+  },
+  body: JSON.stringify({ name: 'Bob', email: 'bob@example.com' })
+});
+// createResponse.status = 201
+const newUser = await createResponse.json();
+// { "id": 43, "name": "Bob", "email": "bob@example.com" }
 ```
+
+<span class="label label-py">Python</span>
+
+```python
+import requests
+
+# GET request
+response = requests.get(
+    'https://api.example.com/users/42',
+    headers={'Authorization': 'Bearer token123'}
+)
+# response.status_code = 200
+user = response.json()
+
+# POST request
+response = requests.post(
+    'https://api.example.com/users',
+    json={'name': 'Bob', 'email': 'bob@example.com'},
+    headers={'Authorization': 'Bearer token123'}
+)
+# response.status_code = 201
+new_user = response.json()
+```
+
+### Query Parameters vs Request Body
+
+Two ways to send data to the server:
+
+- **Query parameters**: appended to the URL. Used for filtering, searching, pagination. Visible in the URL.
+  `GET /api/orders?status=pending&page=2&limit=20`
+
+- **Request body**: sent in the body of POST/PUT/PATCH requests. Used for creating or updating resources. Not visible in the URL.
+  `POST /api/orders` with body `{ "customerId": "42", "items": [...] }`
 
 <div class="callout tip">
 

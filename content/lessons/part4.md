@@ -636,6 +636,290 @@ class TracingMiddleware(BaseHTTPMiddleware):
 <strong>Structured logging is essential.</strong> JSON logs with consistent fields (traceId, spanId, service, method, path, status, duration) let you filter and correlate across services. Never use unstructured <code>console.log("something happened")</code> in production.
 </div>
 
+### Observability Tools in Practice
+
+The observability ecosystem splits into open-source, self-hosted tools and fully managed cloud services. Open-source gives you control and avoids vendor lock-in. Managed services reduce operational burden but cost more at scale.
+
+| Category | Open Source | Cloud Managed | What It Does |
+|---|---|---|---|
+| **Logging** | ELK Stack (Elasticsearch + Logstash + Kibana), Grafana Loki | CloudWatch Logs, Datadog Logs | Collects, indexes, and searches discrete event records from your services |
+| **Metrics** | Prometheus + Grafana | CloudWatch Metrics, Datadog | Aggregates numeric time-series data: counters, gauges, histograms |
+| **Tracing** | Jaeger, Zipkin | AWS X-Ray, Datadog APM | Tracks a single request as it flows across service boundaries, showing latency per span |
+| **All-in-One** | Grafana Stack (Loki + Prometheus + Tempo + Grafana) | Datadog, New Relic | Unified platform covering logs, metrics, and traces in a single UI |
+
+<div class="callout info">
+<strong>OpenTelemetry (OTel)</strong> is the vendor-neutral, CNCF-backed standard for instrumentation. You instrument your code once with the OTel SDK, then export telemetry data to any backend: Jaeger, Prometheus, Datadog, or any other OTel-compatible collector. This means you can switch observability vendors without changing application code. OTel covers traces, metrics, and logs with a single set of APIs.
+</div>
+
+### Setting Up a Practical Observability Stack
+
+A production-ready observability stack needs three things: trace collection, metrics scraping, and a way to view both. Here is a concrete setup using OpenTelemetry.
+
+**Architecture:**
+
+```
+Your App (OTel SDK)
+    ├── traces  → OTel Collector → Jaeger (view in browser at :16686)
+    └── metrics → OTel Collector → Prometheus (scrape at :9090) → Grafana (:3000)
+```
+
+**Step 1: Install the OpenTelemetry SDK**
+
+<span class="label label-ts">TypeScript</span>
+
+```bash
+npm install @opentelemetry/sdk-node \
+  @opentelemetry/auto-instrumentations-node \
+  @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/exporter-metrics-otlp-http
+```
+
+**Step 2: Create the tracing setup file**
+
+<span class="label label-ts">TypeScript</span>, `tracing.ts`: load this file before your app starts.
+
+```typescript
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
+import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
+
+const sdk = new NodeSDK({
+  serviceName: "order-service",
+  traceExporter: new OTLPTraceExporter({
+    url: "http://otel-collector:4318/v1/traces",
+  }),
+  metricReader: new PeriodicExportingMetricReader({
+    exporter: new OTLPMetricExporter({
+      url: "http://otel-collector:4318/v1/metrics",
+    }),
+    exportIntervalMillis: 15000,
+  }),
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      // Auto-instruments HTTP, Express, pg, mysql, redis, and more
+      "@opentelemetry/instrumentation-fs": { enabled: false },
+    }),
+  ],
+});
+
+sdk.start();
+process.on("SIGTERM", () => sdk.shutdown());
+```
+
+**Step 3: Start your app with tracing enabled**
+
+```bash
+node --require ./tracing.js dist/server.js
+```
+
+This auto-instruments all HTTP requests, Express routes, and database calls without any code changes to your route handlers.
+
+**Step 4: How a trace looks in Jaeger**
+
+When a request hits your API gateway and flows through multiple services, Jaeger displays a waterfall of spans:
+
+```
+Trace: abc-123-def-456                                    Duration: 245ms
+├── [order-service] POST /api/orders                      ├─────────────────────────────┤ 245ms
+│   ├── [order-service] middleware: auth                   ├──┤ 12ms
+│   ├── [order-service] pg.query: INSERT INTO orders       ├────┤ 35ms
+│   ├── [payment-service] POST /api/payments               ├──────────────┤ 120ms
+│   │   ├── [payment-service] pg.query: SELECT balance      ├──┤ 8ms
+│   │   └── [payment-service] HTTP POST stripe.com/charge    ├────────┤ 95ms
+│   └── [inventory-service] PUT /api/stock                   ├─────┤ 45ms
+│       └── [inventory-service] redis.decrby: stock:sku-42    ├─┤ 3ms
+```
+
+Each bar is a **span**. The parent-child nesting shows you exactly where time is spent. In this example, the Stripe API call dominates latency at 95ms.
+
+<span class="label label-py">Python</span>, FastAPI + OpenTelemetry equivalent:
+
+```bash
+pip install opentelemetry-distro opentelemetry-exporter-otlp
+opentelemetry-bootstrap -a install
+```
+
+```python
+# tracing_setup.py
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+resource = Resource.create({"service.name": "order-service"})
+provider = TracerProvider(resource=resource)
+provider.add_span_processor(
+    BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4318/v1/traces"))
+)
+trace.set_tracer_provider(provider)
+
+def instrument_app(app):
+    FastAPIInstrumentor.instrument_app(app)
+```
+
+```python
+# main.py
+from fastapi import FastAPI
+from tracing_setup import instrument_app
+
+app = FastAPI()
+instrument_app(app)
+
+@app.get("/api/orders/{order_id}")
+async def get_order(order_id: str):
+    return {"order_id": order_id, "status": "confirmed"}
+```
+
+```bash
+opentelemetry-instrument python main.py
+```
+
+### Metrics: What to Measure
+
+Not everything that can be measured should be. Two frameworks help you focus on what matters.
+
+**RED Method** (for request-driven services):
+
+| Signal | What to Measure | Example |
+|---|---|---|
+| **R**ate | Requests per second | `http_requests_total` |
+| **E**rrors | Failed requests per second | `http_errors_total` or requests with status >= 500 |
+| **D**uration | Latency distribution per request | `http_request_duration_seconds` histogram |
+
+**USE Method** (for infrastructure resources like CPU, memory, disks, network):
+
+| Signal | What to Measure | Example |
+|---|---|---|
+| **U**tilization | Percentage of resource capacity in use | CPU at 78% |
+| **S**aturation | Amount of queued or deferred work | Thread pool queue depth of 340 |
+| **E**rrors | Count of error events on the resource | Disk I/O errors, network packet drops |
+
+**The Four Golden Signals** (from Google's SRE book) combine both perspectives:
+
+1. **Latency**: how long requests take. Track p50, p95, and p99 separately. A healthy average can hide a terrible tail.
+2. **Traffic**: demand on your system. Requests per second, concurrent connections, or messages consumed per second.
+3. **Errors**: the rate of failed requests, whether explicit (HTTP 500) or implicit (HTTP 200 with wrong content, or responses slower than an SLO threshold).
+4. **Saturation**: how "full" your service is. Queue depths, memory usage, thread pool exhaustion. Saturation predicts problems before they cause errors.
+
+<span class="label label-ts">TypeScript</span>, Prometheus metrics with OpenTelemetry:
+
+```typescript
+import { metrics } from "@opentelemetry/api";
+
+const meter = metrics.getMeter("order-service");
+
+const requestCounter = meter.createCounter("http_requests_total", {
+  description: "Total HTTP requests",
+});
+
+const requestDuration = meter.createHistogram("http_request_duration_seconds", {
+  description: "HTTP request duration in seconds",
+  unit: "s",
+});
+
+const errorCounter = meter.createCounter("http_errors_total", {
+  description: "Total HTTP errors (status >= 500)",
+});
+
+// Use in Express middleware
+function metricsMiddleware(req, res, next) {
+  const start = performance.now();
+  res.on("finish", () => {
+    const duration = (performance.now() - start) / 1000;
+    const labels = { method: req.method, path: req.route?.path || req.path, status: String(res.statusCode) };
+    requestCounter.add(1, labels);
+    requestDuration.record(duration, labels);
+    if (res.statusCode >= 500) errorCounter.add(1, labels);
+  });
+  next();
+}
+```
+
+### Alerting Strategy
+
+Good alerts wake you up for the right reasons. Bad alerts train you to ignore your pager.
+
+**Alert on symptoms, not causes.** A high CPU alert tells you something is busy, but it does not tell you if users are affected. Instead, alert on what users experience: high error rate, elevated latency, or dropped requests. CPU is a diagnostic signal you check after the alert fires.
+
+<div class="callout">
+<strong>Rule of thumb:</strong> if an alert fires and no user is affected, it should not be paging you. Make it a low-priority ticket instead.
+</div>
+
+**SLIs, SLOs, and SLAs:**
+
+| Term | Definition | Example |
+|---|---|---|
+| **SLI** (Service Level Indicator) | A measurable metric of service quality | 95th percentile latency of the /checkout endpoint |
+| **SLO** (Service Level Objective) | A target value for an SLI, set internally | p95 latency < 300ms, measured over a 30-day rolling window |
+| **SLA** (Service Level Agreement) | A contractual commitment with consequences for missing it | 99.9% availability per month, or the customer gets service credits |
+
+The relationship: SLIs are what you measure. SLOs are the targets you set. SLAs are the promises you make to customers (and SLOs should be stricter than SLAs to give you a safety margin).
+
+**Error Budgets:**
+
+An error budget is the inverse of your SLO. If your SLO is 99.9% availability over 30 days, your error budget is 0.1%, which equals roughly 43 minutes of downtime per month.
+
+- While you have budget remaining, ship features and take risks.
+- When the budget is nearly exhausted, freeze deployments and focus on reliability.
+- Error budgets align product and engineering teams. Product wants to ship fast. Engineering wants stability. The error budget gives both sides a shared, objective threshold.
+
+### Dashboards
+
+A good service dashboard answers one question: "Is this service healthy right now?" Build it around the golden signals.
+
+**What to include on every service dashboard:**
+
+| Section | Panels | Why |
+|---|---|---|
+| **Request Rate** | Requests/sec by endpoint, by status code | Shows traffic patterns and whether demand is normal |
+| **Error Rate** | Errors/sec, error percentage (errors / total) | The single most important health signal |
+| **Latency** | p50, p95, p99 response time | p50 shows typical experience, p99 shows worst-case. Both matter. |
+| **Saturation** | Queue depth, connection pool usage, thread pool active/max, memory usage | Predicts failures before they happen |
+| **Dependencies** | Downstream service error rate and latency | Your service is only as healthy as its dependencies |
+
+<div class="callout tip">
+<strong>Dashboard tips:</strong> Use Grafana with Prometheus as the data source. Set consistent time ranges (last 1 hour by default). Add annotation markers for deployments so you can correlate changes with metric shifts. Keep dashboards to 8-12 panels. If you need more, split into overview and deep-dive dashboards.
+</div>
+
+**Example Grafana dashboard JSON snippet** (request rate panel):
+
+```json
+{
+  "title": "Request Rate",
+  "type": "timeseries",
+  "datasource": "Prometheus",
+  "targets": [
+    {
+      "expr": "sum(rate(http_requests_total{service=\"order-service\"}[5m])) by (status)",
+      "legendFormat": "{{status}}"
+    }
+  ]
+}
+```
+
+**Example Prometheus alerting rule** (error rate SLO breach):
+
+```yaml
+groups:
+  - name: order-service-slos
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_errors_total{service="order-service"}[5m]))
+          / sum(rate(http_requests_total{service="order-service"}[5m]))
+          > 0.001
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Order service error rate exceeds 0.1% SLO"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+```
+
 ---
 
 ## Key Takeaways
