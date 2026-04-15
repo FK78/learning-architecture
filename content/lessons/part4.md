@@ -334,6 +334,61 @@ Other users:
   Browser → API → checks Redis → no recent write → Replica DB (fast, scalable)
 ```
 
+#### What If the Primary Goes Down?
+
+Writes always go to the primary, with or without read-your-own-writes. If the primary fails, you can't write at all. That's a database-level concern, not an application-level one.
+
+Most managed databases (RDS, Aurora, Cloud SQL) handle this with **automatic failover**: a replica gets promoted to primary, typically in 30 to 120 seconds.
+
+```text
+Normal:           Primary fails:         After failover:
+Writes → Primary  Writes → ✗ (down)     Writes → Replica 1 (now Primary)
+Reads  → Replicas Reads  → Replicas ✓   Reads  → Replica 2
+```
+
+During the failover window:
+
+| Strategy | What happens | Best for |
+|---|---|---|
+| Fail writes, serve stale reads | Users can browse but not update | Read-heavy apps (catalogs) |
+| Queue writes, process after recovery | Accept the write into a queue, apply later | Order placement |
+| Return an error | "Service temporarily unavailable" | Honest, simple |
+
+#### Alternatives That Avoid Reading From Primary
+
+You don't always need to hit the primary after a write:
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// Alternative 1: Return the data you just wrote (simplest)
+async updateProfile(userId: string, data: ProfileUpdate) {
+  const updated = await primary.query(
+    "UPDATE users SET name = $1 WHERE id = $2 RETURNING *", [data.name, userId]
+  );
+  // Return fresh data directly. Client already has it. No read needed.
+  return updated.rows[0];
+}
+
+// Alternative 2: Check if replica has caught up before reading
+async getProfile(userId: string, requestingUserId: string) {
+  const recentWrite = await redis.get(`recent-write:${requestingUserId}`);
+  if (!recentWrite) {
+    return replica.query("SELECT * FROM users WHERE id = $1", [userId]);
+  }
+  // Check replica lag instead of always hitting primary
+  const lag = await replica.query("SELECT extract(epoch from now() - pg_last_xact_replay_timestamp())");
+  if (lag.rows[0].extract < 1) { // less than 1 second behind
+    return replica.query("SELECT * FROM users WHERE id = $1", [userId]);
+  }
+  return primary.query("SELECT * FROM users WHERE id = $1", [userId]);
+}
+```
+
+<div class="callout tip">
+  <strong>Alternative 1 (return what you wrote) is the simplest and most common.</strong> After a POST or PUT, return the created/updated resource in the response. The client already has fresh data without any read at all. Most REST APIs do this by default.
+</div>
+
 #### Monotonic Reads
 
 A different problem: a user refreshes twice and sees data go *backwards*. First refresh hits replica A (up to date), second refresh hits replica B (behind). Their order count goes from 5 to 4 and back to 5.
