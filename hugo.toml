@@ -1,6 +1,6 @@
 baseURL = 'https://fk78.github.io/learning-architecture/'
 locale = 'en-us'
-title = 'Learning Architecture'
+title = 'The Engineering Playbook'
 [module]
 proxy = "direct"
 [[module.imports]]

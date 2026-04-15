@@ -869,6 +869,168 @@ A cold start happens when a Lambda function is invoked after an idle period. The
 </div>
 
 
+## Web Servers and Reverse Proxies
+
+A **web server** serves static files (HTML, CSS, JS, images), handles TLS termination, and manages client connections. A **reverse proxy** sits in front of your application servers, routing requests, load balancing across instances, caching responses, and terminating SSL so your app doesn't have to.
+
+**Nginx** is the most common choice for both roles. Other options include **Caddy** (automatic HTTPS, zero-config TLS), **Traefik** (container-native, auto-discovers services), and **HAProxy** (high-performance TCP/HTTP load balancing).
+
+### Basic Reverse Proxy to a Node.js App
+
+```nginx
+# Nginx reverse proxy: forwards requests to a Node.js app on port 3000
+server {
+    listen 80;
+    server_name example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### SSL Termination with Multiple Upstream Servers
+
+```nginx
+upstream app_servers {
+    server 10.0.1.10:3000;
+    server 10.0.1.11:3000;
+    server 10.0.1.12:3000;
+}
+
+server {
+    listen 443 ssl;
+    server_name example.com;
+
+    ssl_certificate     /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+    location / {
+        proxy_pass http://app_servers;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### How It Fits Together
+
+```text
+              ┌──────────────┐
+              │    Client     │
+              └──────┬───────┘
+                     │ HTTPS
+              ┌──────▼───────┐
+              │    Nginx      │
+              │ (SSL, routing)│
+              └──────┬───────┘
+                     │ HTTP (internal)
+         ┌───────────┴───────────┐
+         ▼                       ▼
+   ┌──────────────┐     ┌──────────────┐
+   │ App Server 1 │     │ App Server 2 │
+   │  (port 3000) │     │  (port 3000) │
+   └──────────────┘     └──────────────┘
+```
+
+Nginx terminates SSL so your app servers handle plain HTTP internally. It distributes traffic across multiple instances and can serve static files directly without hitting your application.
+
+### When Do You Need One?
+
+**Always in production.** Never expose your application server (Express, Gunicorn, Uvicorn) directly to the internet. These servers are designed to handle application logic, not to deal with slow clients, TLS negotiation, request buffering, or connection limits at scale. A reverse proxy handles all of that.
+
+<div class="callout info">
+  In Kubernetes, the Ingress controller (often Nginx) serves this role. In serverless, API Gateway does it. The concept is the same: a layer between the internet and your application.
+</div>
+
+## GitOps
+
+GitOps uses **Git as the single source of truth** for infrastructure and application deployments. Instead of running manual commands or clicking through dashboards, you define the desired state of your system in a Git repository. An operator running in your cluster watches the repo and automatically applies changes.
+
+### How It Works
+
+You push a change to a Git repo. An operator (ArgoCD, Flux) detects the change and reconciles the cluster to match the desired state defined in the repo.
+
+```text
+   ┌──────────────┐       ┌──────────────────┐       ┌──────────────────┐
+   │  Developer    │       │   Git Repository  │       │   Kubernetes     │
+   │  pushes code  │──────▶│  (desired state)  │◀──────│   Cluster        │
+   └──────────────┘       └──────────────────┘       └──────────────────┘
+                                    │                         ▲
+                                    │    ┌──────────────┐     │
+                                    └───▶│   ArgoCD /    │─────┘
+                                         │   Flux        │
+                                         │ (detects diff,│
+                                         │  applies it)  │
+                                         └──────────────┘
+```
+
+### GitOps vs Traditional CI/CD
+
+Traditional CI/CD **pushes** changes: the pipeline builds an artifact and deploys it to the target environment. GitOps **pulls** changes: the operator in the cluster continuously watches the repo and pulls the desired state.
+
+The push model means your CI system needs credentials to your production cluster. The pull model means only the in-cluster operator needs access, reducing the attack surface.
+
+### Benefits
+
+- **Audit trail** -- every change is a Git commit with an author, timestamp, and message
+- **Rollback** -- `git revert` undoes a deployment. The operator detects the change and rolls back the cluster
+- **Consistency** -- the cluster always matches what is defined in the repo. Manual drift is automatically corrected
+
+### Tools
+
+**ArgoCD** is the most widely adopted GitOps operator. It provides a web UI, supports Helm and Kustomize, and handles multi-cluster deployments. **Flux** is a lighter alternative that runs entirely as Kubernetes controllers with no UI.
+
+## Service Mesh
+
+A service mesh is a **dedicated infrastructure layer for service-to-service communication**. It handles concerns that every microservice needs but that you don't want to implement in every service's code: mutual TLS (mTLS) for encryption between services, traffic management, automatic retries, circuit breaking, and distributed tracing.
+
+### How It Works
+
+A **sidecar proxy** (typically Envoy) is deployed alongside each service instance. All inbound and outbound network traffic passes through the sidecar. The service itself communicates over plain HTTP to localhost; the sidecar handles encryption, retries, load balancing, and telemetry transparently.
+
+```text
+   ┌─────────────────────────┐         ┌─────────────────────────┐
+   │       Pod A              │         │       Pod B              │
+   │  ┌───────────┐          │         │          ┌───────────┐  │
+   │  │ Service A │──▶┌─────┐│  mTLS   │┌─────┐◀──│ Service B │  │
+   │  └───────────┘   │Envoy│├────────▶││Envoy│   └───────────┘  │
+   │                  │Proxy││         ││Proxy│                   │
+   │                  └─────┘│         │└─────┘                   │
+   └─────────────────────────┘         └─────────────────────────┘
+
+   The mesh handles: encryption, retries, circuit breaking, tracing
+   The services handle: business logic only
+```
+
+### What It Handles
+
+- **mTLS** -- automatic encryption and identity verification between every service, with no code changes
+- **Traffic management** -- canary releases, traffic splitting, header-based routing at the mesh level
+- **Retries and timeouts** -- configurable per-route retry policies without touching application code
+- **Circuit breaking** -- stop sending traffic to a failing service before it cascades
+- **Observability** -- automatic request metrics, distributed traces, and access logs for every service call
+
+### Main Tools
+
+**Istio** is the most popular and feature-rich, but it is complex to operate and resource-heavy. **Linkerd** is simpler, lighter, and easier to get started with. **Consul Connect** from HashiCorp integrates with their broader ecosystem (Vault, Nomad).
+
+### When to Use a Service Mesh
+
+**Use it when:** you have many microservices (20+), you need mTLS everywhere, and you want consistent observability and traffic policies without modifying application code.
+
+**Don't use it when:** you have fewer than 10 services, you're running a monolith, or you don't have dedicated platform engineers. The operational overhead of running and debugging a mesh is significant.
+
+<div class="callout">
+  A service mesh solves real problems but adds significant operational complexity. Most teams don't need one until they have 20+ services and dedicated platform engineers to manage it.
+</div>
+
 ## Key Takeaways
 
 1. **Load balancers** distribute traffic. Use L7 for HTTP-aware routing, L4 for raw TCP performance
@@ -879,6 +1041,9 @@ A cold start happens when a Lambda function is invoked after an idle period. The
 6. **CI/CD pipelines** automate the path from commit to production. Blue-green for instant rollback, canary for gradual rollout
 7. **Multi-region** eliminates single-region failure. Choose active-active or active-passive based on your RPO/RTO requirements and budget
 8. **Serverless** lets you run code without managing servers. Ideal for event-driven workloads, sporadic traffic, and simple APIs. Use containers when you need persistent connections, long-running processes, or predictable high-throughput costs
+9. **Web servers and reverse proxies** sit between the internet and your application. Never expose app servers directly. Nginx handles SSL, routing, and connection management so your app doesn't have to
+10. **GitOps** uses Git as the single source of truth for deployments. Push to a repo, an operator applies the change. You get audit trails, easy rollbacks, and guaranteed consistency between your repo and your cluster
+11. **Service meshes** handle service-to-service communication (mTLS, retries, observability) transparently via sidecar proxies. Powerful but operationally complex. Most teams don't need one until they have 20+ services
 
 ## Check Your Understanding
 

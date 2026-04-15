@@ -36,7 +36,7 @@ function buildSidebar(activePage) {
     }
   };
 
-  let html = '<h2>Architecture Learning</h2>';
+  let html = '<h2>The Engineering Playbook</h2>';
 
   for (const [partLabel, pages] of Object.entries(nav)) {
     html += `<div class="part-label">${partLabel}</div>`;

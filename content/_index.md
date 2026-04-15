@@ -1,10 +1,10 @@
 ---
-title: "Architecture Learning"
-linkTitle: "Architecture Learning"
+title: "The Engineering Playbook"
+linkTitle: "The Engineering Playbook"
 ---
 
-{{< blocks/cover title="Architecture Learning" image_anchor="top" height="med" color="dark" >}}
-<p class="lead mt-4">Software architecture patterns, solutions, and concepts — an interactive learning path.</p>
+{{< blocks/cover title="The Engineering Playbook" image_anchor="top" height="med" color="dark" >}}
+<p class="lead mt-4">Practical guides to software architecture, backend engineering, and DevOps. Patterns, trade-offs, and real-world examples.</p>
 <a class="btn btn-lg btn-primary me-3 mb-4" href="{{< relref "/lessons/part0" >}}">
   Get Started →
 </a>

@@ -625,6 +625,288 @@ test("getOrder returns order", async () => {
 ```
 
 
+
+## Design Patterns (GoF)
+
+Design patterns are reusable solutions to common problems in software design. The "Gang of Four" (GoF) catalogued 23 patterns in 1994. You don't need all of them. These 7 are the ones that show up constantly in backend systems.
+
+### 1. Factory
+
+**What it does:** Creates objects without exposing the creation logic to the caller. The caller asks for a type and gets back the right object.
+
+**When to use it:** When you have a family of related classes and the caller shouldn't need to know which concrete class to instantiate.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+interface Notifier {
+  send(message: string): void;
+}
+
+class EmailNotifier implements Notifier {
+  send(message: string) {
+    console.log(`Email: ${message}`);
+  }
+}
+
+class SmsNotifier implements Notifier {
+  send(message: string) {
+    console.log(`SMS: ${message}`);
+  }
+}
+
+class NotificationFactory {
+  static create(type: "email" | "sms"): Notifier {
+    switch (type) {
+      case "email": return new EmailNotifier();
+      case "sms":   return new SmsNotifier();
+    }
+  }
+}
+
+// Usage
+const notifier = NotificationFactory.create("email");
+notifier.send("Your order has shipped");
+```
+
+The caller never references `EmailNotifier` or `SmsNotifier` directly. Adding a new channel (e.g. push notifications) means adding a class and a case, not changing calling code.
+
+### 2. Strategy
+
+**What it does:** Defines a family of algorithms, encapsulates each one, and makes them interchangeable at runtime.
+
+**When to use it:** When you have multiple ways to do the same thing and the choice depends on context (user type, config, feature flag).
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+interface PricingStrategy {
+  calculate(basePrice: number): number;
+}
+
+class RegularPricing implements PricingStrategy {
+  calculate(basePrice: number): number {
+    return basePrice;
+  }
+}
+
+class VipPricing implements PricingStrategy {
+  calculate(basePrice: number): number {
+    return basePrice * 0.8; // 20% discount
+  }
+}
+
+class OrderService {
+  constructor(private pricing: PricingStrategy) {}
+
+  checkout(basePrice: number): number {
+    return this.pricing.calculate(basePrice);
+  }
+}
+
+// Usage
+const vipOrder = new OrderService(new VipPricing());
+console.log(vipOrder.checkout(100)); // 80
+```
+
+Swap the strategy without touching `OrderService`. This is the [Open/Closed Principle](#2-openclosed-principle-ocp) in action.
+
+### 3. Observer
+
+**What it does:** Defines a one-to-many dependency. When one object changes state, all its dependents are notified automatically.
+
+**When to use it:** When an action should trigger multiple side effects (send email, update analytics, clear cache) without the source knowing about each one.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+type Listener = (data: any) => void;
+
+class EventEmitter {
+  private listeners: Map<string, Listener[]> = new Map();
+
+  on(event: string, fn: Listener) {
+    if (!this.listeners.has(event)) this.listeners.set(event, []);
+    this.listeners.get(event)!.push(fn);
+  }
+
+  emit(event: string, data: any) {
+    for (const fn of this.listeners.get(event) ?? []) {
+      fn(data);
+    }
+  }
+}
+
+class OrderService {
+  constructor(private events: EventEmitter) {}
+
+  async createOrder(order: Order) {
+    // ... save order ...
+    this.events.emit("order.created", order);
+  }
+}
+
+// Listeners registered independently
+const events = new EventEmitter();
+events.on("order.created", (order) => console.log(`Email sent to ${order.customerEmail}`));
+events.on("order.created", (order) => console.log(`Analytics tracked for order ${order.id}`));
+events.on("order.created", (order) => console.log(`Inventory updated for ${order.items.length} items`));
+
+const service = new OrderService(events);
+```
+
+`OrderService` doesn't know who is listening or what they do. Adding a new reaction means registering a new listener, not editing the service.
+
+### 4. Decorator
+
+**What it does:** Wraps an object to add behavior without modifying the original. The wrapper implements the same interface as the object it wraps.
+
+**When to use it:** When you want to layer on cross-cutting concerns (logging, caching, metrics) without polluting the core logic.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+interface UserRepository {
+  findById(id: string): Promise<User | null>;
+}
+
+class PostgresUserRepository implements UserRepository {
+  async findById(id: string): Promise<User | null> {
+    // ... actual DB query ...
+    return { id, name: "Alice" };
+  }
+}
+
+class LoggingRepository implements UserRepository {
+  constructor(private inner: UserRepository) {}
+
+  async findById(id: string): Promise<User | null> {
+    console.log(`[DB] findById called with id=${id}`);
+    const result = await this.inner.findById(id);
+    console.log(`[DB] findById returned ${result ? "found" : "null"}`);
+    return result;
+  }
+}
+
+// Usage: wrap the real repo with logging
+const repo = new LoggingRepository(new PostgresUserRepository());
+```
+
+The `LoggingRepository` adds behavior (logging) without changing `PostgresUserRepository`. You can stack decorators: `new LoggingRepository(new CachingRepository(new PostgresUserRepository()))`.
+
+### 5. Adapter
+
+**What it does:** Converts the interface of one class into the interface another class expects. Makes incompatible interfaces work together.
+
+**When to use it:** When you integrate a third-party library or external service whose API doesn't match your internal interface.
+
+This is exactly the pattern from the [coupling section](#fixing-tight-coupling--worked-example), where `StripeGateway` adapts Stripe's API to your `PaymentGateway` interface.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// Your internal interface
+interface PaymentGateway {
+  charge(amount: number, currency: string, token: string): Promise<PaymentResult>;
+}
+
+// Stripe's SDK has its own API shape
+class StripeAdapter implements PaymentGateway {
+  async charge(amount: number, currency: string, token: string): Promise<PaymentResult> {
+    // Adapt your interface to Stripe's API
+    const stripeResponse = await stripe.charges.create({
+      amount,
+      currency,
+      source: token,
+      description: "Order charge",
+    });
+    return { success: stripeResponse.status === "succeeded", id: stripeResponse.id };
+  }
+}
+```
+
+Your application code depends on `PaymentGateway`. The adapter translates between your world and the external service's world. Switching from Stripe to another provider means writing a new adapter, not changing your services.
+
+### 6. Facade
+
+**What it does:** Provides a simplified interface to a complex subsystem. Hides the coordination of multiple services behind a single method.
+
+**When to use it:** When a workflow involves calling multiple services in sequence and you want callers to have a single entry point.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+class OrderFacade {
+  constructor(
+    private payment: PaymentService,
+    private inventory: InventoryService,
+    private email: EmailService
+  ) {}
+
+  async placeOrder(order: Order): Promise<void> {
+    await this.inventory.reserve(order.items);
+    await this.payment.charge(order.total, order.paymentToken);
+    await this.email.sendConfirmation(order.customerEmail, order.id);
+  }
+}
+
+// Caller doesn't need to know about 3 services
+const facade = new OrderFacade(paymentService, inventoryService, emailService);
+await facade.placeOrder(order);
+```
+
+Without the facade, every caller would need to coordinate inventory, payment, and email in the right order. The facade encapsulates that workflow.
+
+### 7. Proxy
+
+**What it does:** Provides a surrogate or placeholder for another object to control access to it. The proxy implements the same interface as the real object.
+
+**When to use it:** When you want to add caching, access control, lazy loading, or rate limiting without modifying the underlying object.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+interface UserRepository {
+  findById(id: string): Promise<User | null>;
+}
+
+class CachingProxy implements UserRepository {
+  private cache: Map<string, User> = new Map();
+
+  constructor(private real: UserRepository) {}
+
+  async findById(id: string): Promise<User | null> {
+    if (this.cache.has(id)) return this.cache.get(id)!;
+    const user = await this.real.findById(id);
+    if (user) this.cache.set(id, user);
+    return user;
+  }
+}
+
+// Usage
+const repo = new CachingProxy(new PostgresUserRepository());
+await repo.findById("1"); // hits DB
+await repo.findById("1"); // hits cache
+```
+
+The caller doesn't know it's talking to a proxy. The caching logic is completely separate from the database logic.
+
+### Summary
+
+| Pattern | Problem it solves | One-line example |
+|---|---|---|
+| **Factory** | Object creation without exposing concrete classes | `NotificationFactory.create("email")` |
+| **Strategy** | Swapping algorithms at runtime | `new OrderService(new VipPricing())` |
+| **Observer** | Notifying multiple listeners when something happens | `events.emit("order.created", order)` |
+| **Decorator** | Adding behavior without modifying the original | `new LoggingRepository(realRepo)` |
+| **Adapter** | Making incompatible interfaces work together | `new StripeAdapter()` implements `PaymentGateway` |
+| **Facade** | Simplifying a complex multi-service workflow | `facade.placeOrder(order)` |
+| **Proxy** | Controlling access (caching, auth, lazy loading) | `new CachingProxy(realRepo)` |
+
+<div class="callout tip">
+  <strong>You don't need to memorize all GoF patterns.</strong> These 7 are the ones you will encounter most in backend systems. Recognize them when you see them, and reach for them when the problem fits.
+</div>
+
 ## SOLID Principles
 
 Five design principles that guide you toward maintainable, flexible object-oriented code. Each one addresses a specific kind of pain you'll hit as a codebase grows.
@@ -896,6 +1178,159 @@ The controller doesn't contain business logic or SQL. The service doesn't know a
 
 <div class="callout info">
   <strong>Note:</strong> MVP (Model-View-Presenter) and MVVM (Model-View-ViewModel) are frontend variants of this pattern, commonly used in mobile and SPA frameworks. They are not covered here.
+</div>
+
+## Clean Architecture and Hexagonal Architecture
+
+<div class="callout info">
+  <strong>Core Idea:</strong> Clean Architecture and Hexagonal Architecture describe the same core idea: protect your business logic from infrastructure details. The terminology differs but the principle is identical.
+</div>
+
+These patterns build on the [Dependency Inversion Principle](#5-dependency-inversion-principle-dip) and take it to its logical conclusion: your entire application is structured so that business logic sits at the center and knows nothing about the outside world.
+
+### The Dependency Rule
+
+The fundamental rule: **dependencies point inward**. Outer layers depend on inner layers, never the reverse. Inner layers (domain and business logic) know nothing about outer layers (frameworks, databases, UI).
+
+<div class="diagram">
+  <div class="layer">Frameworks & Drivers (Express, Postgres, external APIs)</div>
+  <div class="arrow">↓</div>
+  <div class="layer">Interface Adapters (controllers, presenters, gateways)</div>
+  <div class="arrow">↓</div>
+  <div class="layer">Use Cases (application-specific business rules)</div>
+  <div class="arrow">↓</div>
+  <div class="layer">Entities (domain objects with core business rules)</div>
+</div>
+
+Nothing in an inner circle can know anything about something in an outer circle. A domain entity never imports Express. A use case never references a database driver. If an outer layer needs to communicate inward, it does so through interfaces defined by the inner layer.
+
+### Hexagonal Architecture (Ports and Adapters)
+
+The domain is at the center. It defines **ports** (interfaces describing what it needs) and the outside world provides **adapters** (implementations that connect to databases, HTTP, messaging, and other infrastructure).
+
+- **Ports**: interfaces defined by the domain. They describe what the domain needs without specifying how.
+- **Adapters**: concrete implementations that fulfill those ports by connecting to the outside world.
+
+<span class="label label-ts">TypeScript</span>
+
+```typescript
+// Port: defined by the domain — what it needs
+interface OrderRepository {
+  findById(id: string): Promise<Order | null>;
+  save(order: Order): Promise<void>;
+}
+
+// Adapter: connects to the real database
+class PostgresOrderRepository implements OrderRepository {
+  constructor(private pool: Pool) {}
+
+  async findById(id: string): Promise<Order | null> {
+    const result = await this.pool.query(
+      "SELECT * FROM orders WHERE id = $1", [id]
+    );
+    return result.rows[0] ? this.toDomain(result.rows[0]) : null;
+  }
+
+  async save(order: Order): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO orders (id, customer_id, total, status) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET total = $3, status = $4",
+      [order.id, order.customerId, order.total, order.status]
+    );
+  }
+
+  private toDomain(row: any): Order {
+    return new Order(row.id, row.customer_id, row.total, row.status);
+  }
+}
+
+// Domain service: only knows the port, never the adapter
+class PlaceOrderUseCase {
+  constructor(private orders: OrderRepository) {}
+
+  async execute(customerId: string, items: Item[]): Promise<Order> {
+    const order = Order.create(customerId, items);
+    await this.orders.save(order);
+    return order;
+  }
+}
+```
+
+The power of this pattern is **swapping adapters** without touching business logic: <span class="label label-ts">TypeScript</span>
+
+```typescript
+// Test adapter: no database needed
+class InMemoryOrderRepository implements OrderRepository {
+  private store = new Map<string, Order>();
+
+  async findById(id: string): Promise<Order | null> {
+    return this.store.get(id) ?? null;
+  }
+
+  async save(order: Order): Promise<void> {
+    this.store.set(order.id, order);
+  }
+}
+
+// Production wiring
+const prodRepo = new PostgresOrderRepository(pool);
+const useCase = new PlaceOrderUseCase(prodRepo);
+
+// Test wiring
+const testRepo = new InMemoryOrderRepository();
+const testUseCase = new PlaceOrderUseCase(testRepo);
+```
+
+### Clean Architecture Layers
+
+| Layer | Responsibility | Examples |
+|---|---|---|
+| **Entities** | Domain objects with core business rules | `Order`, `Customer`, `Money` |
+| **Use Cases** | Application-specific business rules, orchestrate entities | `PlaceOrderUseCase`, `CancelOrderUseCase` |
+| **Interface Adapters** | Convert data between use cases and external formats | Controllers, presenters, gateways |
+| **Frameworks & Drivers** | External tools and delivery mechanisms | Express, Postgres, external APIs |
+
+A typical directory structure: <span class="label label-ts">TypeScript</span>
+
+```text
+src/
+  domain/
+    entities/
+      Order.ts
+      Customer.ts
+    ports/
+      OrderRepository.ts
+      PaymentGateway.ts
+  application/
+    use-cases/
+      PlaceOrderUseCase.ts
+      CancelOrderUseCase.ts
+  infrastructure/
+    persistence/
+      PostgresOrderRepository.ts
+      InMemoryOrderRepository.ts
+    payment/
+      StripePaymentGateway.ts
+  interfaces/
+    http/
+      OrderController.ts
+      routes.ts
+```
+
+Each folder maps to a layer. Dependencies only point inward: `infrastructure/` imports from `domain/`, never the reverse.
+
+### When to Use This
+
+<div class="callout tip">
+  <strong>Good fit:</strong>
+  <ul>
+    <li>Large codebases with complex business logic</li>
+    <li>When you need to swap infrastructure (database, framework) without touching business logic</li>
+    <li>When multiple teams work on different layers independently</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <strong>Not a good fit:</strong> simple CRUD apps, prototypes, or small services where the overhead of multiple layers outweighs the benefit. If your app is mostly "take data from HTTP, validate, save to database," layered architecture or even a simple MVC pattern is sufficient.
 </div>
 
 ## Test-Driven Development (TDD)
