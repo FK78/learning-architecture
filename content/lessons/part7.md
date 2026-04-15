@@ -115,6 +115,8 @@ Data architecture is the foundation every other architectural decision rests on.
 
 ---
 
+{{< audio-player part="part7" >}}
+
 ## 1. Database Selection
 
 There is no universal "best database." Each category optimizes for a different access pattern.

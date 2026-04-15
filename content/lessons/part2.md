@@ -101,6 +101,8 @@ interactive_cases:
     red_herrings: "CEO's language preference, office locations, competitor's tech stack, revenue targets"
 ---
 
+{{< audio-player part="part2" >}}
+
 ## REST Fundamentals
 
 **REST** (Representational State Transfer) is an architectural style for APIs. It's not a protocol — it's a set of constraints that, when followed, make APIs predictable and scalable.

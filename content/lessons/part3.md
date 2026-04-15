@@ -101,6 +101,8 @@ interactive_cases:
     key_assumptions: "orders per city per hour, events per order lifecycle (created, accepted, picked up, delivered, rated = ~5-8 events), peak multiplier"
 ---
 
+{{< audio-player part="part3" >}}
+
 ## Event-Driven Architecture
 
 In a traditional architecture, services call each other directly. In an event-driven architecture, services communicate by **producing and consuming events**. The producer doesn't know who's listening.

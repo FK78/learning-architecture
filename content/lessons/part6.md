@@ -111,6 +111,8 @@ interactive_cases:
     key_assumptions: "CDN offload (90-99% of traffic), origin server bandwidth, geographic distribution, redundancy factor"
 ---
 
+{{< audio-player part="part6" >}}
+
 ## Load Balancing
 
 A load balancer distributes incoming traffic across multiple servers so no single server becomes overwhelmed. It's the front door of any scalable system.

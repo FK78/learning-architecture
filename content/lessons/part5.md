@@ -111,6 +111,8 @@ interactive_cases:
     red_herrings: "Office WiFi password, number of npm vulnerabilities (noise without severity context), CEO's Facebook login request"
 ---
 
+{{< audio-player part="part5" >}}
+
 ## Authentication vs Authorization
 
 Two concepts that are often confused but serve completely different purposes.

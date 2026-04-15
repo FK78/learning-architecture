@@ -83,6 +83,8 @@ This part is deliberately opinionated. Real system design has no single correct 
 
 ---
 
+{{< audio-player part="part8" >}}
+
 ## 1. The System Design Process
 
 Every design — whether on a whiteboard, in a design doc, or in an interview — follows the same five-phase loop:

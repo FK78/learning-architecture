@@ -24,7 +24,7 @@ except ImportError:
     sys.exit(1)
 
 VOICE = "nova"  # Options: alloy, echo, fable, onyx, nova, shimmer
-MODEL = "tts-1"  # tts-1 (faster, cheaper) or tts-1-hd (higher quality)
+MODEL = "gpt-4o-mini-tts"  # gpt-4o-mini-tts (best), tts-1, or tts-1-hd
 AUDIO_DIR = Path("static/audio")
 
 

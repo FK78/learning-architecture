@@ -104,6 +104,8 @@ interactive_cases:
     hidden_facts: "The app is a 3-year-old Node.js monolith. 15 developers. Controllers have 2000+ lines with SQL, business logic, and HTTP handling mixed together. No tests. Deploy takes 4 hours. The 'slowness' is actually developer velocity, not runtime performance. The database is fine."
 ---
 
+{{< audio-player part="part1" >}}
+
 ## Layered Architecture
 
 The most common starting pattern. You organize code into horizontal layers, each with a distinct responsibility. A request flows top-down:

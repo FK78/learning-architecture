@@ -100,6 +100,8 @@ interactive_cases:
     hidden_facts: "15 microservices on ECS. No circuit breakers. Services retry failed calls infinitely with no backoff. One slow database query in the user service cascades to all services. No distributed tracing. Monitoring is basic CloudWatch CPU/memory only. Last 3 outages were all cascading failures triggered by different root causes. Team of 8, no SRE."
 ---
 
+{{< audio-player part="part4" >}}
+
 ## CAP Theorem
 
 In a distributed system, you can't have everything. The **CAP theorem** states that when a network partition occurs, a distributed data store can guarantee at most **two of three** properties:
