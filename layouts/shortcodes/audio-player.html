@@ -6,49 +6,64 @@ document.addEventListener('DOMContentLoaded', function() {
   fetch(base + 'manifest.json')
     .then(function(r) { return r.json(); })
     .then(function(sections) {
-      // Build a map of parent h2 -> child h3 headings in DOM order
       var headings = document.querySelectorAll('h2, h3');
-      var currentParent = null;
-      // Track which headings have been matched to avoid duplicates
-      var matched = new Set();
+      var matched = [];
+
+      function normalize(str) {
+        if (!str) return '';
+        // Decode HTML entities and normalize whitespace
+        var el = document.createElement('span');
+        el.innerHTML = str;
+        return el.textContent.trim().replace(/\s+/g, ' ');
+      }
+
+      function headingText(h) {
+        // Get text without any existing audio buttons
+        var clone = h.cloneNode(true);
+        var btns = clone.querySelectorAll('.inline-audio-btn');
+        btns.forEach(function(b) { b.remove(); });
+        return clone.textContent.trim().replace(/\s+/g, ' ');
+      }
 
       sections.forEach(function(s) {
-        var targetHeading = null;
+        var target = null;
+        var sTitle = normalize(s.title);
+        var sParent = s.parent ? normalize(s.parent) : null;
 
-        if (s.parent) {
-          // Find the h3 with this title that's under the correct h2 parent
+        if (sParent) {
+          // Find h3 under the correct h2 parent
           var inParent = false;
           for (var i = 0; i < headings.length; i++) {
             var h = headings[i];
             if (h.tagName === 'H2') {
-              inParent = (h.textContent.trim() === s.parent);
-            } else if (h.tagName === 'H3' && inParent && h.textContent.trim() === s.title && !matched.has(h)) {
-              targetHeading = h;
+              inParent = (headingText(h) === sParent);
+            } else if (h.tagName === 'H3' && inParent && headingText(h) === sTitle && matched.indexOf(h) === -1) {
+              target = h;
               break;
             }
           }
         } else {
-          // Top-level h2
+          // Top-level: match h2 or standalone h3
           for (var j = 0; j < headings.length; j++) {
-            if (headings[j].textContent.trim() === s.title && !matched.has(headings[j])) {
-              targetHeading = headings[j];
+            if (headingText(headings[j]) === sTitle && matched.indexOf(headings[j]) === -1) {
+              target = headings[j];
               break;
             }
           }
         }
 
-        if (targetHeading) {
-          matched.add(targetHeading);
+        if (target) {
+          matched.push(target);
           var btn = document.createElement('button');
           btn.className = 'inline-audio-btn';
           btn.innerHTML = '🔊';
           btn.title = 'Listen to this section';
           btn.setAttribute('data-src', base + s.file);
           btn.onclick = function() { toggleInlineAudio(this); };
-          targetHeading.appendChild(btn);
+          target.appendChild(btn);
         }
       });
     })
-    .catch(function() {});
+    .catch(function(err) { console.error('Audio manifest error:', err); });
 });
 </script>
