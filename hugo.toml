@@ -1,4 +1,4 @@
-baseURL = 'https://fk78.github.io/learning-architecture/'
+baseURL = 'https://fk78.github.io/engineering-playbook/'
 locale = 'en-us'
 title = 'The Engineering Playbook'
 [module]

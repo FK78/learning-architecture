@@ -2,7 +2,7 @@
 
 Practical guides to software architecture, backend engineering, and DevOps. Patterns, trade-offs, and real-world examples.
 
-**Live site:** https://fk78.github.io/learning-architecture/
+**Live site:** https://fk78.github.io/engineering-playbook/
 
 ## Contents
 
