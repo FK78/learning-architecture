@@ -92,13 +92,13 @@ case_studies:
         description: "Write current state to a normalized PostgreSQL database for the dashboard (fast reads, familiar queries). Simultaneously write every change to an immutable audit log (DynamoDB with no delete permissions, or S3 with object lock). The dashboard reads from PostgreSQL; compliance queries the audit log. A reconciliation job periodically verifies the two are consistent."
         trade_off: "Simplest mental model — current state in one place, audit trail in another. Each store is optimized for its purpose. But dual-writes risk inconsistency if one write succeeds and the other fails (need transactional outbox or change data capture). The reconciliation job adds operational overhead. Two sources of truth is inherently fragile."
 interactive_cases:
-  - title: "Live Sports Betting Platform Throughput"
+  - title: "Ride-Hailing Platform Event Throughput"
     type: "back-of-envelope"
     difficulty: "⭐⭐⭐"
-    brief: "Estimate the event throughput for a live sports betting platform during a Premier League Saturday (10 simultaneous matches). Consider bets placed, odds updates, and settlement events."
-    opening: "We're building the event backbone for a live sports betting platform. This Saturday there are 10 Premier League matches kicking off at 3pm. We need to size our Kafka cluster. Can you estimate how many events per second we'll need to handle at peak?"
-    answer_range: "5,000-50,000 events/second depending on assumptions about active users, bet frequency, odds update frequency, and market count per match"
-    key_assumptions: "concurrent users during peak (50K-500K), bets per user per match, number of markets per match (50-200), odds update frequency per market, settlement events per match, peak concentration during goals/red cards"
+    brief: "Estimate the event throughput for a ride-hailing platform (like Uber) operating in 5 major cities during Friday evening rush hour. Consider ride requests, driver location updates, matching, and trip lifecycle events."
+    opening: "We're sizing the event infrastructure for a ride-hailing platform operating in 5 major cities. Friday evening is our peak. We need to figure out how many events per second our system needs to handle before we choose our messaging infrastructure. Can you walk me through an estimate?"
+    answer_range: "10,000-100,000 events/second depending on assumptions about active drivers, location update frequency, rides per hour, and trip lifecycle events"
+    key_assumptions: "active drivers per city (5K-20K), GPS location update frequency (every 3-5 seconds), ride requests per city per hour at peak, events per ride lifecycle (requested, matched, driver en route, arrived, trip started, trip ended, payment processed, rated = 8+), surge pricing recalculations"
 ---
 
 {{< audio-player part="part3" >}}
