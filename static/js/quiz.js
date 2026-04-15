@@ -97,9 +97,9 @@ const DEFAULT_MODEL = "gpt-4o-mini";
 
 const PROVIDERS = {
   openai: { name: "OpenAI", url: "https://api.openai.com/v1/chat/completions", models: ["gpt-4o-mini", "gpt-4o", "gpt-5.4"], placeholder: "sk-..." },
-  openrouter: { name: "OpenRouter", url: "https://openrouter.ai/api/v1/chat/completions", models: ["openai/gpt-4o-mini", "openai/gpt-4o", "anthropic/claude-sonnet-4", "google/gemini-2.5-flash", "meta-llama/llama-4-maverick"], placeholder: "sk-or-..." },
+  openrouter: { name: "OpenRouter", url: "https://openrouter.ai/api/v1/chat/completions", models: ["openai/gpt-4o-mini", "openai/gpt-4o", "openai/gpt-5.4", "anthropic/claude-sonnet-4", "anthropic/claude-haiku-3.5", "google/gemini-2.5-flash", "google/gemini-2.5-pro", "deepseek/deepseek-chat-v3-0324", "deepseek/deepseek-r1", "meta-llama/llama-4-maverick", "meta-llama/llama-4-scout", "mistralai/mistral-medium-3", "qwen/qwen3-235b-a22b"], placeholder: "sk-or-..." },
   anthropic: { name: "Anthropic (via OpenRouter)", url: "https://openrouter.ai/api/v1/chat/completions", models: ["anthropic/claude-sonnet-4", "anthropic/claude-haiku-3.5"], placeholder: "sk-or-..." },
-  custom: { name: "Custom (OpenAI-compatible)", url: "", models: [], placeholder: "your-api-key" }
+  custom: { name: "Custom endpoint", url: "", models: [], placeholder: "your-api-key" }
 };
 
 function getProvider() {
